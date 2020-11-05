@@ -34,11 +34,14 @@ import io.prestosql.plugin.hive.PartitionNotFoundException;
 import io.prestosql.plugin.hive.PartitionStatistics;
 import io.prestosql.plugin.hive.SchemaAlreadyExistsException;
 import io.prestosql.plugin.hive.TableAlreadyExistsException;
+import io.prestosql.plugin.hive.acid.AcidOperation;
+import io.prestosql.plugin.hive.acid.AcidTransaction;
 import io.prestosql.plugin.hive.authentication.HiveIdentity;
 import io.prestosql.plugin.hive.metastore.Column;
 import io.prestosql.plugin.hive.metastore.HiveColumnStatistics;
 import io.prestosql.plugin.hive.metastore.HivePrincipal;
 import io.prestosql.plugin.hive.metastore.HivePrivilegeInfo;
+import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.PartitionWithStatistics;
 import io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreAuthenticationConfig.ThriftMetastoreAuthenticationType;
 import io.prestosql.plugin.hive.util.RetryDriver;
@@ -81,6 +84,7 @@ import org.apache.hadoop.hive.metastore.api.PrivilegeBag;
 import org.apache.hadoop.hive.metastore.api.PrivilegeGrantInfo;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.TxnAbortedException;
+import org.apache.hadoop.hive.metastore.api.TxnToWriteId;
 import org.apache.hadoop.hive.metastore.api.UnknownDBException;
 import org.apache.hadoop.hive.metastore.api.UnknownTableException;
 import org.apache.thrift.TApplicationException;
@@ -93,6 +97,7 @@ import javax.inject.Inject;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -121,6 +126,7 @@ import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.collect.Sets.difference;
 import static io.prestosql.plugin.hive.HiveErrorCode.HIVE_METASTORE_ERROR;
 import static io.prestosql.plugin.hive.HiveErrorCode.HIVE_TABLE_LOCK_NOT_ACQUIRED;
+import static io.prestosql.plugin.hive.ViewReaderUtil.PRESTO_VIEW_FLAG;
 import static io.prestosql.plugin.hive.metastore.HivePrivilegeInfo.HivePrivilege;
 import static io.prestosql.plugin.hive.metastore.HivePrivilegeInfo.HivePrivilege.OWNERSHIP;
 import static io.prestosql.plugin.hive.metastore.MetastoreUtil.partitionKeyFilterToStringList;
@@ -134,7 +140,6 @@ import static io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreUtil.isAv
 import static io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreUtil.parsePrivilege;
 import static io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreUtil.toMetastoreApiPartition;
 import static io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreUtil.updateStatisticsParameters;
-import static io.prestosql.plugin.hive.util.HiveUtil.PRESTO_VIEW_FLAG;
 import static io.prestosql.spi.StandardErrorCode.ALREADY_EXISTS;
 import static io.prestosql.spi.StandardErrorCode.NOT_SUPPORTED;
 import static io.prestosql.spi.security.PrincipalType.USER;
@@ -188,17 +193,30 @@ public class ThriftHiveMetastore
     private final boolean assumeCanonicalPartitionKeys;
 
     @Inject
-    public ThriftHiveMetastore(MetastoreLocator metastoreLocator, HiveConfig hiveConfig, ThriftMetastoreConfig thriftConfig, ThriftMetastoreAuthenticationConfig authenticationConfig, HdfsEnvironment hdfsEnvironment)
+    public ThriftHiveMetastore(
+            MetastoreLocator metastoreLocator,
+            HiveConfig hiveConfig,
+            MetastoreConfig metastoreConfig,
+            ThriftMetastoreConfig thriftConfig,
+            ThriftMetastoreAuthenticationConfig authenticationConfig,
+            HdfsEnvironment hdfsEnvironment)
     {
         this(
                 metastoreLocator,
                 hiveConfig,
+                metastoreConfig,
                 thriftConfig,
                 hdfsEnvironment,
                 authenticationConfig.getAuthenticationType() != ThriftMetastoreAuthenticationType.NONE);
     }
 
-    public ThriftHiveMetastore(MetastoreLocator metastoreLocator, HiveConfig hiveConfig, ThriftMetastoreConfig thriftConfig, HdfsEnvironment hdfsEnvironment, boolean authenticationEnabled)
+    public ThriftHiveMetastore(
+            MetastoreLocator metastoreLocator,
+            HiveConfig hiveConfig,
+            MetastoreConfig metastoreConfig,
+            ThriftMetastoreConfig thriftConfig,
+            HdfsEnvironment hdfsEnvironment,
+            boolean authenticationEnabled)
     {
         this.hdfsContext = new HdfsContext(ConnectorIdentity.ofUser(DEFAULT_METASTORE_USER));
         this.clientProvider = requireNonNull(metastoreLocator, "metastoreLocator is null");
@@ -210,7 +228,10 @@ public class ThriftHiveMetastore
         this.maxRetries = thriftConfig.getMaxRetries();
         this.impersonationEnabled = thriftConfig.isImpersonationEnabled();
         this.deleteFilesOnDrop = thriftConfig.isDeleteFilesOnDrop();
+        requireNonNull(hiveConfig, "hiveConfig is null");
         this.translateHiveViews = hiveConfig.isTranslateHiveViews();
+        requireNonNull(metastoreConfig, "metastoreConfig is null");
+        checkArgument(!metastoreConfig.isHideDeltaLakeTables(), "Hiding Delta Lake tables is not supported"); // TODO
         this.maxWaitForLock = thriftConfig.getMaxWaitForTransactionLock();
         this.authenticationEnabled = authenticationEnabled;
 
@@ -326,9 +347,6 @@ public class ThriftHiveMetastore
                     .stopOnIllegalExceptions()
                     .run("getTable", stats.getGetTable().wrap(() -> {
                         Table table = getTableFromMetastore(identity, databaseName, tableName);
-                        if (!translateHiveViews && table.getTableType().equals(TableType.VIRTUAL_VIEW.name()) && !isPrestoView(table)) {
-                            throw new HiveViewNotSupportedException(new SchemaTableName(databaseName, tableName));
-                        }
                         return Optional.of(table);
                     }));
         }
@@ -358,11 +376,6 @@ public class ThriftHiveMetastore
     public Set<ColumnStatisticType> getSupportedColumnStatistics(Type type)
     {
         return ThriftMetastoreUtil.getSupportedColumnStatistics(type);
-    }
-
-    private static boolean isPrestoView(Table table)
-    {
-        return "true".equals(table.getParameters().get(PRESTO_VIEW_FLAG));
     }
 
     @Override
@@ -501,7 +514,7 @@ public class ThriftHiveMetastore
     }
 
     @Override
-    public void updateTableStatistics(HiveIdentity identity, String databaseName, String tableName, Function<PartitionStatistics, PartitionStatistics> update)
+    public void updateTableStatistics(HiveIdentity identity, String databaseName, String tableName, Function<PartitionStatistics, PartitionStatistics> update, AcidTransaction transaction)
     {
         Table originalTable = getTable(identity, databaseName, tableName)
                 .orElseThrow(() -> new TableNotFoundException(new SchemaTableName(databaseName, tableName)));
@@ -512,6 +525,9 @@ public class ThriftHiveMetastore
         Table modifiedTable = originalTable.deepCopy();
         HiveBasicStatistics basicStatistics = updatedStatistics.getBasicStatistics();
         modifiedTable.setParameters(updateStatisticsParameters(modifiedTable.getParameters(), basicStatistics));
+        if (transaction.isAcidTransactionRunning()) {
+            modifiedTable.setWriteId(transaction.getWriteId());
+        }
         alterTable(identity, databaseName, tableName, modifiedTable);
 
         io.prestosql.plugin.hive.metastore.Table table = fromMetastoreApiTable(modifiedTable);
@@ -1145,6 +1161,31 @@ public class ThriftHiveMetastore
     }
 
     @Override
+    public void alterTransactionalTable(HiveIdentity identity, Table table, long transactionId, long writeId, EnvironmentContext context)
+    {
+        try {
+            retry()
+                    .stopOn(InvalidOperationException.class, MetaException.class)
+                    .stopOnIllegalExceptions()
+                    .run("alterTransactionalTable", stats.getAlterTransactionalTable().wrap(() -> {
+                        try (ThriftMetastoreClient client = createMetastoreClient(identity)) {
+                            client.alterTransactionalTable(table, transactionId, writeId, context);
+                        }
+                        return null;
+                    }));
+        }
+        catch (NoSuchObjectException e) {
+            throw new TableNotFoundException(new SchemaTableName(table.getDbName(), table.getTableName()));
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw propagate(e);
+        }
+    }
+
+    @Override
     public Optional<List<String>> getPartitionNamesByFilter(HiveIdentity identity, String databaseName, String tableName, List<String> columnNames, TupleDomain<String> partitionKeysFilter)
     {
         Optional<List<String>> parts = partitionKeyFilterToStringList(columnNames, partitionKeysFilter, assumeCanonicalPartitionKeys);
@@ -1593,6 +1634,18 @@ public class ThriftHiveMetastore
     @Override
     public void acquireSharedReadLock(HiveIdentity identity, String queryId, long transactionId, List<SchemaTableName> fullTables, List<HivePartition> partitions)
     {
+        acquireSharedLock(DataOperationType.SELECT, false, identity, queryId, transactionId, fullTables, partitions);
+    }
+
+    @Override
+    public void acquireTableWriteLock(HiveIdentity identity, String queryId, long transactionId, String dbName, String tableName, DataOperationType operation, boolean isDynamicPartitionWrite)
+    {
+        acquireSharedLock(operation, isDynamicPartitionWrite, identity, queryId, transactionId, ImmutableList.of(new SchemaTableName(dbName, tableName)), Collections.emptyList());
+    }
+
+    private void acquireSharedLock(DataOperationType operation, boolean isDynamicPartitionWrite, HiveIdentity identity, String queryId, long transactionId, List<SchemaTableName> fullTables, List<HivePartition> partitions)
+    {
+        requireNonNull(operation, "operation is null");
         checkArgument(!identity.getUsername().map(String::isEmpty).orElse(true), "User should be provided to acquire locks");
         requireNonNull(queryId, "queryId is null");
 
@@ -1605,11 +1658,11 @@ public class ThriftHiveMetastore
                 .setUser(identity.getUsername().get());
 
         for (SchemaTableName table : fullTables) {
-            request.addLockComponent(createLockComponentForRead(table, Optional.empty()));
+            request.addLockComponent(createLockComponentForOperation(table, operation, isDynamicPartitionWrite, Optional.empty()));
         }
 
         for (HivePartition partition : partitions) {
-            request.addLockComponent(createLockComponentForRead(partition.getTableName(), Optional.of(partition.getPartitionId())));
+            request.addLockComponent(createLockComponentForOperation(partition.getTableName(), operation, isDynamicPartitionWrite, Optional.of(partition.getPartitionId())));
         }
 
         LockRequest lockRequest = request.build();
@@ -1654,14 +1707,14 @@ public class ThriftHiveMetastore
         }
     }
 
-    private static LockComponent createLockComponentForRead(SchemaTableName table, Optional<String> partitionName)
+    private static LockComponent createLockComponentForOperation(SchemaTableName table, DataOperationType operation, boolean isDynamicPartitionWrite, Optional<String> partitionName)
     {
         requireNonNull(table, "table is null");
         requireNonNull(partitionName, "partitionName is null");
 
         LockComponentBuilder builder = new LockComponentBuilder();
         builder.setShared();
-        builder.setOperationType(DataOperationType.SELECT);
+        builder.setOperationType(operation);
 
         builder.setDbName(table.getSchemaName());
         builder.setTableName(table.getTableName());
@@ -1669,6 +1722,7 @@ public class ThriftHiveMetastore
 
         // acquire locks is called only for TransactionalTable
         builder.setIsTransactional(true);
+        builder.setIsDynamicPartitionWrite(isDynamicPartitionWrite);
         return builder.build();
     }
 
@@ -1713,6 +1767,98 @@ public class ThriftHiveMetastore
         catch (ConfigValSecurityException e) {
             log.debug(e, "Could not fetch value for config '%s' from Hive", name);
             return Optional.empty();
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw propagate(e);
+        }
+    }
+
+    @Override
+    public long allocateWriteId(HiveIdentity identity, String dbName, String tableName, long transactionId)
+    {
+        try {
+            return retry()
+                    .stopOnIllegalExceptions()
+                    .run("allocateWriteId", stats.getAllocateWriteId().wrap(() -> {
+                        try (ThriftMetastoreClient metastoreClient = createMetastoreClient(identity)) {
+                            List<TxnToWriteId> list = metastoreClient.allocateTableWriteIds(dbName, tableName, ImmutableList.of(transactionId));
+                            return Iterables.getOnlyElement(list).getWriteId();
+                        }
+                    }));
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw propagate(e);
+        }
+    }
+
+    @Override
+    public void updateTableWriteId(HiveIdentity identity, String dbName, String tableName, long transactionId, long writeId, OptionalLong rowCountChange)
+    {
+        checkArgument(transactionId > 0, "transactionId should be a positive integer, but was %s", transactionId);
+        requireNonNull(dbName, "dbName is null");
+        requireNonNull(tableName, "tableName is null");
+        checkArgument(writeId > 0, "writeId should be a positive integer, but was %s", writeId);
+        try {
+            retry()
+                    .stopOnIllegalExceptions()
+                    .run("updateTableWriteId", stats.getUpdateTableWriteId().wrap(() -> {
+                        try (ThriftMetastoreClient metastoreClient = createMetastoreClient(identity)) {
+                            metastoreClient.updateTableWriteId(dbName, tableName, transactionId, writeId, rowCountChange);
+                        }
+                        return null;
+                    }));
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw propagate(e);
+        }
+    }
+
+    @Override
+    public void alterPartitions(HiveIdentity identity, String dbName, String tableName, List<Partition> partitions, long writeId)
+    {
+        checkArgument(writeId > 0, "writeId should be a positive integer, but was %s", writeId);
+        try {
+            retry()
+                    .stopOnIllegalExceptions()
+                    .run("alterPartitions", stats.getAlterPartitions().wrap(() -> {
+                        try (ThriftMetastoreClient metastoreClient = createMetastoreClient(identity)) {
+                            metastoreClient.alterPartitions(dbName, tableName, partitions, writeId);
+                        }
+                        return null;
+                    }));
+        }
+        catch (TException e) {
+            throw new PrestoException(HIVE_METASTORE_ERROR, e);
+        }
+        catch (Exception e) {
+            throw propagate(e);
+        }
+    }
+
+    @Override
+    public void addDynamicPartitions(HiveIdentity identity, String dbName, String tableName, List<String> partitionNames, long transactionId, long writeId, AcidOperation operation)
+    {
+        checkArgument(writeId > 0, "writeId should be a positive integer, but was %s", writeId);
+        requireNonNull(partitionNames, "partitionNames is null");
+        checkArgument(!partitionNames.isEmpty(), "partitionNames is empty");
+        try {
+            retry()
+                    .stopOnIllegalExceptions()
+                    .run("alterPartitions", stats.getAddDynamicPartitions().wrap(() -> {
+                        try (ThriftMetastoreClient metastoreClient = createMetastoreClient(identity)) {
+                            metastoreClient.addDynamicPartitions(dbName, tableName, partitionNames, transactionId, writeId, operation);
+                        }
+                        return null;
+                    }));
         }
         catch (TException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);

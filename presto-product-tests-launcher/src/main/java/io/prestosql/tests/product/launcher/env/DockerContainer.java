@@ -13,11 +13,9 @@
  */
 package io.prestosql.tests.product.launcher.env;
 
-import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.HealthCheck;
-import com.github.dockerjava.api.model.Statistics;
-import com.github.dockerjava.core.InvocationBuilder;
+import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
@@ -26,12 +24,13 @@ import io.airlift.log.Logger;
 import net.jodah.failsafe.Failsafe;
 import net.jodah.failsafe.FailsafeExecutor;
 import net.jodah.failsafe.Timeout;
-import org.testcontainers.DockerClientFactory;
+import net.jodah.failsafe.function.CheckedRunnable;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.FixedHostPortGenericContainer;
 import org.testcontainers.containers.SelinuxContext;
+import org.testcontainers.containers.wait.strategy.WaitAllStrategy;
+import org.testcontainers.containers.wait.strategy.WaitStrategy;
 import org.testcontainers.images.builder.Transferable;
-import org.testcontainers.utility.MountableFile;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -43,11 +42,18 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.getStackTraceAsString;
 import static com.google.common.io.MoreFiles.deleteRecursively;
+import static io.airlift.concurrent.Threads.daemonThreadsNamed;
+import static io.airlift.units.DataSize.ofBytes;
+import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.nio.file.Files.size;
 import static java.time.Duration.ofSeconds;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -63,9 +69,11 @@ public class DockerContainer
             .withCancel(true);
 
     private static final FailsafeExecutor executor = Failsafe
-            .with(asyncTimeout);
+            .with(asyncTimeout)
+            .with(Executors.newCachedThreadPool(daemonThreadsNamed("docker-container-%d")));
 
     private String logicalName;
+    private final StatisticsFetcher statistics;
     private List<String> logPaths = new ArrayList<>();
     private Optional<EnvironmentListener> listener = Optional.empty();
 
@@ -73,6 +81,7 @@ public class DockerContainer
     {
         super(dockerImageName);
         this.logicalName = requireNonNull(logicalName, "logicalName is null");
+        this.statistics = new StatisticsFetcher(this, executor);
 
         // workaround for https://github.com/testcontainers/testcontainers-java/pull/2861
         setCopyToFileContainerPathMap(new LinkedHashMap<>());
@@ -118,13 +127,6 @@ public class DockerContainer
     }
 
     @Override
-    public void copyFileToContainer(MountableFile mountableFile, String containerPath)
-    {
-        verifyHostPath(mountableFile.getResolvedPath());
-        copyFileToContainer(containerPath, () -> super.copyFileToContainer(mountableFile, containerPath));
-    }
-
-    @Override
     public void copyFileToContainer(Transferable transferable, String containerPath)
     {
         copyFileToContainer(containerPath, () -> super.copyFileToContainer(transferable, containerPath));
@@ -137,7 +139,7 @@ public class DockerContainer
         return this;
     }
 
-    public DockerContainer withHealthCheck(String healthCheckScript)
+    public DockerContainer withHealthCheck(Path healthCheckScript)
     {
         HealthCheck cmd = new HealthCheck()
                 .withTest(ImmutableList.of("CMD", "health.sh"))
@@ -177,16 +179,53 @@ public class DockerContainer
         this.listener.ifPresent(listener -> listener.containerStopped(this, containerInfo));
     }
 
-    private void copyFileToContainer(String containerPath, Runnable copy)
+    private void copyFileToContainer(String containerPath, CheckedRunnable copy)
     {
-        Stopwatch stopwatch = Stopwatch.createStarted();
-        copy.run();
-        log.info("Copied files into %s %s in %.1f s", this, containerPath, stopwatch.elapsed(MILLISECONDS) / 1000.);
+        final Stopwatch stopwatch = Stopwatch.createStarted();
+
+        try {
+            executor.runAsync(copy).whenComplete((ignore, throwable) -> {
+                if (throwable == null) {
+                    log.info("Copied files into %s %s in %.1f s", this, containerPath, stopwatch.elapsed(MILLISECONDS) / 1000.);
+                }
+                else {
+                    log.warn("Could not copy files into %s %s: %s", this, containerPath, getStackTraceAsString((Throwable) throwable));
+                }
+            }).get();
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public void clearDependencies()
+    public String execCommand(String... command)
     {
-        dependencies.clear();
+        String fullCommand = Joiner.on(" ").join(command);
+        if (!isRunning()) {
+            throw new RuntimeException(format("Could not execute command '%s' in stopped container %s", fullCommand, logicalName));
+        }
+
+        log.info("Executing command '%s' in container %s", fullCommand, logicalName);
+
+        try {
+            ExecResult result = (ExecResult) executor.getAsync(() -> execInContainer(command)).get();
+            if (result.getExitCode() == 0) {
+                return result.getStdout();
+            }
+
+            throw new RuntimeException(format("Could not execute command '%s' in container %s: %s", fullCommand, logicalName, result.getStderr()));
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        catch (ExecutionException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void copyLogsToHostPath(Path hostPath)
@@ -201,78 +240,93 @@ public class DockerContainer
         Path hostLogPath = Paths.get(hostPath.toString(), logicalName);
         ensurePathExists(hostLogPath);
 
+        ImmutableList.Builder<String> files = ImmutableList.builder();
+
         for (String containerLogPath : logPaths) {
             try {
-                listFilesInContainer(containerLogPath).forEach(filename ->
-                        copyFileFromContainer(filename, hostLogPath));
+                files.addAll(listFilesInContainer(containerLogPath));
             }
-            catch (Exception e) {
-                log.warn("Could not copy logs from %s to '%s': %s", logicalName, hostPath, e);
+            catch (RuntimeException e) {
+                log.warn("Could not list files in container %s path %s", logicalName, containerLogPath);
             }
+        }
+
+        ImmutableList<String> filesToCopy = files.build();
+        if (filesToCopy.isEmpty()) {
+            log.warn("There are no log files to copy from container %s", logicalName);
+            return;
+        }
+
+        try {
+            String filesList = Joiner.on("\n")
+                    .skipNulls()
+                    .join(filesToCopy);
+
+            String containerLogsListingFile = format("/tmp/%s-logs-list.txt", UUID.randomUUID());
+            String containerLogsArchive = format("/tmp/logs-%s-%s.tar.gz", logicalName, UUID.randomUUID());
+
+            log.info("Creating logs archive %s from file list %s (%d files)", containerLogsArchive, containerLogsListingFile, filesToCopy.size());
+            executor.runAsync(() -> copyFileToContainer(Transferable.of(filesList.getBytes(UTF_8)), containerLogsListingFile)).get();
+
+            execCommand("tar", "-cf", containerLogsArchive, "-T", containerLogsListingFile);
+            copyFileFromContainer(containerLogsArchive, hostPath.resolve(format("%s/logs.tar.gz", logicalName)));
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        catch (ExecutionException | RuntimeException e) {
+            log.warn("Could not copy logs archive from %s: %s", logicalName, getStackTraceAsString(e));
         }
     }
 
-    private void copyFileFromContainer(String filename, Path rootHostPath)
+    public StatisticsFetcher.Stats getStats()
     {
-        Path targetPath = rootHostPath.resolve(filename.replaceFirst("^\\/", ""));
+        return statistics.get();
+    }
 
-        log.info("Copying file %s to %s", filename, targetPath);
+    public DockerContainer waitingForAll(WaitStrategy... strategies)
+    {
+        WaitAllStrategy waitAllStrategy = new WaitAllStrategy();
+        for (WaitStrategy strategy : strategies) {
+            waitAllStrategy.withStrategy(strategy);
+        }
+        waitingFor(waitAllStrategy);
+        return this;
+    }
+
+    private void copyFileFromContainer(String filename, Path targetPath)
+    {
         ensurePathExists(targetPath.getParent());
 
         try {
-            executor.run(() -> copyFileFromContainer(filename, targetPath.toString()));
+            executor.runAsync(() -> {
+                log.info("Copying file %s to %s", filename, targetPath);
+                copyFileFromContainer(filename, targetPath.toString());
+                log.info("Copied file %s to %s (size: %s bytes)", filename, targetPath, ofBytes(size(targetPath)).succinct());
+            }).get();
         }
-        catch (Exception e) {
-            log.warn("Could not copy file from %s to %s", filename, targetPath);
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        catch (ExecutionException | RuntimeException e) {
+            log.warn("Could not copy file from %s to %s: %s", filename, targetPath, getStackTraceAsString(e));
         }
     }
 
-    private Stream<String> listFilesInContainer(String path)
+    private List<String> listFilesInContainer(String path)
     {
-        if (!isRunning()) {
-            log.warn("Could not list files in %s for stopped container %s", path, logicalName);
-            return Stream.empty();
-        }
-
         try {
-            ExecResult result = (ExecResult) executor.get(() -> execInContainer("/usr/bin/find", path, "-type", "f", "-print"));
-
-            if (result.getExitCode() == 0L) {
-                return Splitter.on("\n")
-                        .omitEmptyStrings()
-                        .splitToStream(result.getStdout());
-            }
-
-            log.warn("Could not list files in %s: %s", path, result.getStderr());
+            return Splitter.on("\n")
+                    .omitEmptyStrings()
+                    .splitToList(execCommand("/usr/bin/find", path, "-type", "f", "-print"));
         }
-        catch (Exception e) {
-            log.warn("Could not list files in container '%s': %s", logicalName, e);
+        catch (RuntimeException e) {
+            log.warn("Could not list files in container '%s' path %s: %s", logicalName, path, e);
         }
 
-        return Stream.empty();
-    }
-
-    public Optional<Statistics> getStats()
-    {
-        if (!isRunning()) {
-            log.warn("Could not get statistics for stopped container %s", logicalName);
-            return Optional.empty();
-        }
-
-        try (DockerClient client = DockerClientFactory.lazyClient()) {
-            InvocationBuilder.AsyncResultCallback<Statistics> callback = new InvocationBuilder.AsyncResultCallback<>();
-            client.statsCmd(getContainerId()).exec(callback);
-
-            return Optional.ofNullable(executor.get(callback::awaitResult))
-                    .map(Statistics.class::cast);
-        }
-        catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        catch (Exception e) {
-            log.error("Could not fetch container %s statistics: %s", logicalName, getStackTraceAsString(e));
-            return Optional.empty();
-        }
+        return ImmutableList.of();
     }
 
     @Override
@@ -285,6 +339,12 @@ public class DockerContainer
             // Container without health checks will throw
             return true;
         }
+    }
+
+    public void reset()
+    {
+        // When retrying environment startup we need to stop created containers to reset it's containerId
+        stop();
     }
 
     @Override
@@ -335,9 +395,13 @@ public class DockerContainer
         }
 
         try {
-            executor.run(this::stop);
+            executor.runAsync(this::stop).get();
         }
-        catch (Exception e) {
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        catch (ExecutionException | RuntimeException e) {
             log.warn("Could not stop container correctly: %s", getStackTraceAsString(e));
         }
 

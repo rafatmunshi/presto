@@ -13,17 +13,25 @@
  */
 package io.prestosql.sql.planner.iterative.rule;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Throwables;
 import io.prestosql.Session;
 import io.prestosql.SystemSessionProperties;
 import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.OperatorNotFoundException;
 import io.prestosql.metadata.ResolvedFunction;
 import io.prestosql.spi.PrestoException;
-import io.prestosql.spi.predicate.Utils;
+import io.prestosql.spi.function.InvocationConvention;
 import io.prestosql.spi.type.DecimalType;
 import io.prestosql.spi.type.DoubleType;
+import io.prestosql.spi.type.LongTimestampWithTimeZone;
 import io.prestosql.spi.type.RealType;
+import io.prestosql.spi.type.TimeWithTimeZoneType;
+import io.prestosql.spi.type.TimeZoneKey;
+import io.prestosql.spi.type.TimestampType;
+import io.prestosql.spi.type.TimestampWithTimeZoneType;
 import io.prestosql.spi.type.Type;
+import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.InterpretedFunctionInvoker;
 import io.prestosql.sql.planner.ExpressionInterpreter;
 import io.prestosql.sql.planner.LiteralEncoder;
@@ -39,13 +47,25 @@ import io.prestosql.sql.tree.IsNullPredicate;
 import io.prestosql.sql.tree.NullLiteral;
 import io.prestosql.type.TypeCoercion;
 
+import java.lang.invoke.MethodHandle;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.time.zone.ZoneOffsetTransition;
 import java.util.Optional;
 
+import static io.prestosql.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
+import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.NEVER_NULL;
+import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.BooleanType.BOOLEAN;
+import static io.prestosql.spi.type.DateTimeEncoding.packDateTimeWithZone;
+import static io.prestosql.spi.type.DateTimeEncoding.unpackMillisUtc;
+import static io.prestosql.spi.type.DateTimeEncoding.unpackZoneKey;
 import static io.prestosql.spi.type.DoubleType.DOUBLE;
 import static io.prestosql.spi.type.IntegerType.INTEGER;
 import static io.prestosql.spi.type.RealType.REAL;
+import static io.prestosql.spi.type.Timestamps.PICOSECONDS_PER_NANOSECOND;
 import static io.prestosql.spi.type.TypeUtils.isFloatingPointNaN;
 import static io.prestosql.sql.ExpressionUtils.and;
 import static io.prestosql.sql.ExpressionUtils.or;
@@ -98,23 +118,28 @@ import static java.util.Objects.requireNonNull;
 public class UnwrapCastInComparison
         extends ExpressionRewriteRuleSet
 {
-    public UnwrapCastInComparison(Metadata metadata, TypeAnalyzer typeAnalyzer)
+    public UnwrapCastInComparison(Metadata metadata, TypeOperators typeOperators, TypeAnalyzer typeAnalyzer)
     {
-        super(createRewrite(metadata, typeAnalyzer));
+        super(createRewrite(metadata, typeOperators, typeAnalyzer));
     }
 
-    private static ExpressionRewriter createRewrite(Metadata metadata, TypeAnalyzer typeAnalyzer)
+    private static ExpressionRewriter createRewrite(Metadata metadata, TypeOperators typeOperators, TypeAnalyzer typeAnalyzer)
     {
         requireNonNull(metadata, "metadata is null");
         requireNonNull(typeAnalyzer, "typeAnalyzer is null");
 
-        return (expression, context) -> unwrapCasts(context.getSession(), metadata, typeAnalyzer, context.getSymbolAllocator().getTypes(), expression);
+        return (expression, context) -> unwrapCasts(context.getSession(), metadata, typeOperators, typeAnalyzer, context.getSymbolAllocator().getTypes(), expression);
     }
 
-    public static Expression unwrapCasts(Session session, Metadata metadata, TypeAnalyzer typeAnalyzer, TypeProvider types, Expression expression)
+    public static Expression unwrapCasts(Session session,
+            Metadata metadata,
+            TypeOperators typeOperators,
+            TypeAnalyzer typeAnalyzer,
+            TypeProvider types,
+            Expression expression)
     {
         if (SystemSessionProperties.isUnwrapCasts(session)) {
-            return ExpressionTreeRewriter.rewriteWith(new Visitor(metadata, typeAnalyzer, session, types), expression);
+            return ExpressionTreeRewriter.rewriteWith(new Visitor(metadata, typeOperators, typeAnalyzer, session, types), expression);
         }
 
         return expression;
@@ -124,15 +149,17 @@ public class UnwrapCastInComparison
             extends io.prestosql.sql.tree.ExpressionRewriter<Void>
     {
         private final Metadata metadata;
+        private final TypeOperators typeOperators;
         private final TypeAnalyzer typeAnalyzer;
         private final Session session;
         private final TypeProvider types;
         private final InterpretedFunctionInvoker functionInvoker;
         private final LiteralEncoder literalEncoder;
 
-        public Visitor(Metadata metadata, TypeAnalyzer typeAnalyzer, Session session, TypeProvider types)
+        public Visitor(Metadata metadata, TypeOperators typeOperators, TypeAnalyzer typeAnalyzer, Session session, TypeProvider types)
         {
             this.metadata = requireNonNull(metadata, "metadata is null");
+            this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
             this.typeAnalyzer = requireNonNull(typeAnalyzer, "typeAnalyzer is null");
             this.session = requireNonNull(session, "session is null");
             this.types = requireNonNull(types, "types is null");
@@ -182,6 +209,11 @@ public class UnwrapCastInComparison
 
             Type sourceType = typeAnalyzer.getType(session, types, cast.getExpression());
             Type targetType = typeAnalyzer.getType(session, types, expression.getRight());
+
+            if (targetType instanceof TimestampWithTimeZoneType) {
+                // Note: two TIMESTAMP WITH TIME ZONE values differing in zone only (same instant) are considered equal.
+                right = withTimeZone(((TimestampWithTimeZoneType) targetType), right, session.getTimeZoneKey());
+            }
 
             if (!hasInjectiveImplicitCoercion(sourceType, targetType, right)) {
                 return expression;
@@ -420,6 +452,34 @@ public class UnwrapCastInComparison
                 }
             }
 
+            if (target instanceof TimestampWithTimeZoneType) {
+                TimestampWithTimeZoneType timestampWithTimeZoneType = (TimestampWithTimeZoneType) target;
+                if (source instanceof TimestampType) {
+                    // Cast from TIMESTAMP WITH TIME ZONE to TIMESTAMP and back to TIMESTAMP WITH TIME ZONE does not round trip, unless the value's zone is equal to sesion zone
+                    if (!getTimeZone(timestampWithTimeZoneType, value).equals(session.getTimeZoneKey())) {
+                        return false;
+                    }
+
+                    // Cast from TIMESTAMP to TIMESTAMP WITH TIME ZONE is not monotonic when there is a forward DST change in the session zone
+                    if (!isTimestampToTimestampWithTimeZoneInjectiveAt(session.getTimeZoneKey().getZoneId(), getInstantWithTruncation(timestampWithTimeZoneType, value))) {
+                        return false;
+                    }
+
+                    return true;
+                }
+                // CAST from TIMESTAMP WITH TIME ZONE to d and back to TIMESTAMP WITH TIME ZONE does not round trip for most types d
+                // TODO add test coverage
+                // TODO (https://github.com/prestosql/presto/issues/5798) handle DATE -> TIMESTAMP WITH TIME ZONE
+                return false;
+            }
+
+            if (target instanceof TimeWithTimeZoneType) {
+                // For example, CAST from TIME WITH TIME ZONE to TIME and back to TIME WITH TIME ZONE does not round trip
+
+                // TODO add test coverage
+                return false;
+            }
+
             // Well-behaved implicit casts are injective
             return new TypeCoercion(metadata::getType).canCoerce(source, target);
         }
@@ -433,15 +493,64 @@ public class UnwrapCastInComparison
         {
             return type instanceof DoubleType || type instanceof RealType;
         }
+
+        private int compare(Type type, Object first, Object second)
+        {
+            requireNonNull(first, "first is null");
+            requireNonNull(second, "second is null");
+            MethodHandle comparisonOperator = typeOperators.getComparisonOperator(type, InvocationConvention.simpleConvention(FAIL_ON_NULL, NEVER_NULL, NEVER_NULL));
+            try {
+                return (int) (long) comparisonOperator.invoke(first, second);
+            }
+            catch (Throwable throwable) {
+                Throwables.throwIfUnchecked(throwable);
+                throw new PrestoException(GENERIC_INTERNAL_ERROR, throwable);
+            }
+        }
     }
 
-    private static int compare(Type type, Object first, Object second)
+    /**
+     * Replace time zone component of a {@link TimestampWithTimeZoneType} value with a given one, preserving point in time
+     * (equivalent to {@link java.time.ZonedDateTime#withZoneSameInstant}.
+     */
+    private static Object withTimeZone(TimestampWithTimeZoneType type, Object value, TimeZoneKey newZone)
     {
-        return type.compareTo(
-                Utils.nativeValueToBlock(type, first),
-                0,
-                Utils.nativeValueToBlock(type, second),
-                0);
+        if (type.isShort()) {
+            return packDateTimeWithZone(unpackMillisUtc((long) value), newZone);
+        }
+        LongTimestampWithTimeZone longTimestampWithTimeZone = (LongTimestampWithTimeZone) value;
+        return LongTimestampWithTimeZone.fromEpochMillisAndFraction(longTimestampWithTimeZone.getEpochMillis(), longTimestampWithTimeZone.getPicosOfMilli(), newZone);
+    }
+
+    private static TimeZoneKey getTimeZone(TimestampWithTimeZoneType type, Object value)
+    {
+        if (type.isShort()) {
+            return unpackZoneKey(((long) value));
+        }
+        return TimeZoneKey.getTimeZoneKey(((LongTimestampWithTimeZone) value).getTimeZoneKey());
+    }
+
+    @VisibleForTesting
+    static boolean isTimestampToTimestampWithTimeZoneInjectiveAt(ZoneId zone, Instant instant)
+    {
+        ZoneOffsetTransition transition = zone.getRules().previousTransition(instant.plusNanos(1));
+        if (transition != null) {
+            // DST change forward and the instant is ambiguous, being within the 'gap' area non-monotonic remapping
+            if (!transition.getDuration().isNegative() && !transition.getDateTimeAfter().minusNanos(1).atZone(zone).toInstant().isBefore(instant)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Instant getInstantWithTruncation(TimestampWithTimeZoneType type, Object value)
+    {
+        if (type.isShort()) {
+            return Instant.ofEpochMilli(unpackMillisUtc(((long) value)));
+        }
+        LongTimestampWithTimeZone longTimestampWithTimeZone = (LongTimestampWithTimeZone) value;
+        return Instant.ofEpochMilli(longTimestampWithTimeZone.getEpochMillis())
+                .plus(longTimestampWithTimeZone.getPicosOfMilli() / PICOSECONDS_PER_NANOSECOND, ChronoUnit.NANOS);
     }
 
     private static Expression falseIfNotNull(Expression argument)

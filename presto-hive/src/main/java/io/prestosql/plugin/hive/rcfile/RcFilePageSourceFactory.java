@@ -13,7 +13,6 @@
  */
 package io.prestosql.plugin.hive.rcfile;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
@@ -25,7 +24,9 @@ import io.prestosql.plugin.hive.HdfsEnvironment;
 import io.prestosql.plugin.hive.HiveColumnHandle;
 import io.prestosql.plugin.hive.HiveConfig;
 import io.prestosql.plugin.hive.HivePageSourceFactory;
+import io.prestosql.plugin.hive.HiveTimestampPrecision;
 import io.prestosql.plugin.hive.ReaderProjections;
+import io.prestosql.plugin.hive.acid.AcidTransaction;
 import io.prestosql.plugin.hive.util.FSDataInputStreamTail;
 import io.prestosql.rcfile.AircompressorCodecFactory;
 import io.prestosql.rcfile.HadoopCodecFactory;
@@ -40,7 +41,7 @@ import io.prestosql.rcfile.text.TextRcFileEncoding;
 import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.connector.ConnectorPageSource;
 import io.prestosql.spi.connector.ConnectorSession;
-import io.prestosql.spi.connector.FixedPageSource;
+import io.prestosql.spi.connector.EmptyPageSource;
 import io.prestosql.spi.predicate.TupleDomain;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.TypeManager;
@@ -60,6 +61,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Properties;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -119,7 +121,10 @@ public class RcFilePageSourceFactory
             Properties schema,
             List<HiveColumnHandle> columns,
             TupleDomain<HiveColumnHandle> effectivePredicate,
-            Optional<AcidInfo> acidInfo)
+            Optional<AcidInfo> acidInfo,
+            OptionalInt bucketNumber,
+            boolean originalFile,
+            AcidTransaction transaction)
     {
         RcFileEncoding rcFileEncoding;
         String deserializerClassName = getDeserializerClassName(schema);
@@ -175,12 +180,12 @@ public class RcFilePageSourceFactory
         length = min(dataSource.getSize() - start, length);
         // Split may be empty now that the correct file size is known
         if (length <= 0) {
-            return Optional.of(noProjectionAdaptation(new FixedPageSource(ImmutableList.of())));
+            return Optional.of(noProjectionAdaptation(new EmptyPageSource()));
         }
 
         try {
             ImmutableMap.Builder<Integer, Type> readColumns = ImmutableMap.builder();
-            int timestampPrecision = getTimestampPrecision(session).getPrecision();
+            HiveTimestampPrecision timestampPrecision = getTimestampPrecision(session);
             for (HiveColumnHandle column : projectedReaderColumns) {
                 readColumns.put(column.getBaseHiveColumnIndex(), column.getHiveType().getType(typeManager, timestampPrecision));
             }

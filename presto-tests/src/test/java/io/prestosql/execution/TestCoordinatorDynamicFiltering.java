@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.prestosql.Session;
 import io.prestosql.connector.CatalogName;
+import io.prestosql.plugin.memory.MemoryPlugin;
 import io.prestosql.plugin.tpch.TpchPlugin;
 import io.prestosql.spi.Plugin;
 import io.prestosql.spi.connector.ColumnHandle;
@@ -58,10 +59,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.LongStream;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.prestosql.SystemSessionProperties.JOIN_DISTRIBUTION_TYPE;
 import static io.prestosql.SystemSessionProperties.JOIN_REORDERING_STRATEGY;
+import static io.prestosql.SystemSessionProperties.TASK_CONCURRENCY;
+import static io.prestosql.spi.predicate.Domain.multipleValues;
 import static io.prestosql.spi.predicate.Domain.singleValue;
+import static io.prestosql.spi.predicate.Range.range;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.sql.analyzer.FeaturesConfig.JoinDistributionType.BROADCAST;
 import static io.prestosql.sql.analyzer.FeaturesConfig.JoinDistributionType.PARTITIONED;
@@ -87,8 +93,10 @@ public class TestCoordinatorDynamicFiltering
         // create lineitem table in test connector
         getQueryRunner().installPlugin(new TestPlugin());
         getQueryRunner().installPlugin(new TpchPlugin());
+        getQueryRunner().installPlugin(new MemoryPlugin());
         getQueryRunner().createCatalog("test", "test", ImmutableMap.of());
         getQueryRunner().createCatalog("tpch", "tpch", ImmutableMap.of());
+        getQueryRunner().createCatalog("memory", "memory", ImmutableMap.of());
         computeActual("CREATE TABLE lineitem AS SELECT * FROM tpch.tiny.lineitem");
     }
 
@@ -99,10 +107,14 @@ public class TestCoordinatorDynamicFiltering
         Session session = testSessionBuilder()
                 .setCatalog("test")
                 .setSchema("default")
+                .setSystemProperty(TASK_CONCURRENCY, "2")
                 .setSystemProperty(JOIN_REORDERING_STRATEGY, NONE.name())
                 .setSystemProperty(JOIN_DISTRIBUTION_TYPE, PARTITIONED.name())
                 .build();
         return DistributedQueryRunner.builder(session)
+                .setExtraProperties(ImmutableMap.of(
+                        // keep limits lower to test edge cases
+                        "dynamic-filtering.small-partitioned.max-distinct-values-per-driver", "10"))
                 .build();
     }
 
@@ -151,6 +163,31 @@ public class TestCoordinatorDynamicFiltering
     }
 
     @Test(timeOut = 30_000)
+    public void testInequalityJoinWithSelectiveBuildSide()
+    {
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem JOIN tpch.tiny.supplier ON lineitem.suppkey <= supplier.suppkey AND supplier.name IN ('Supplier#000000001', 'Supplier#000000002')",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        Domain.create(ValueSet.ofRanges(Range.lessThanOrEqual(BIGINT, 2L)), false))));
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem JOIN tpch.tiny.supplier ON lineitem.suppkey < supplier.suppkey AND supplier.name IN ('Supplier#000000001', 'Supplier#000000002')",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        Domain.create(ValueSet.ofRanges(Range.lessThan(BIGINT, 2L)), false))));
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem JOIN tpch.tiny.supplier ON lineitem.suppkey >= supplier.suppkey AND supplier.name IN ('Supplier#000000001', 'Supplier#000000002')",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        Domain.create(ValueSet.ofRanges(Range.greaterThanOrEqual(BIGINT, 1L)), false))));
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem JOIN tpch.tiny.supplier ON lineitem.suppkey > supplier.suppkey AND supplier.name IN ('Supplier#000000001', 'Supplier#000000002')",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        Domain.create(ValueSet.ofRanges(Range.greaterThan(BIGINT, 1L)), false))));
+    }
+
+    @Test(timeOut = 30_000)
     public void testBroadcastJoinWithSelectiveBuildSide()
     {
         assertQueryDynamicFilters(
@@ -162,13 +199,26 @@ public class TestCoordinatorDynamicFiltering
     }
 
     @Test(timeOut = 30_000)
+    public void testJoinWithImplicitCoercion()
+    {
+        // setup fact table with integer suppkey
+        computeActual("CREATE TABLE memory.default.supplier_decimal AS SELECT name, CAST(suppkey as decimal(19, 0)) suppkey_decimal FROM tpch.tiny.supplier");
+
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem JOIN memory.default.supplier_decimal s ON lineitem.suppkey = s.suppkey_decimal AND s.name >= 'Supplier#000000080'",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        multipleValues(BIGINT, LongStream.rangeClosed(80L, 100L).boxed().collect(toImmutableList())))));
+    }
+
+    @Test(timeOut = 30_000)
     public void testJoinWithNonSelectiveBuildSide()
     {
         assertQueryDynamicFilters(
                 "SELECT * FROM lineitem JOIN tpch.tiny.supplier ON lineitem.suppkey = supplier.suppkey",
                 TupleDomain.withColumnDomains(ImmutableMap.of(
                         SUPP_KEY_HANDLE,
-                        Domain.create(ValueSet.ofRanges(Range.range(BIGINT, 1L, true, 100L, true)), false))));
+                        Domain.create(ValueSet.ofRanges(range(BIGINT, 1L, true, 100L, true)), false))));
     }
 
     @Test(timeOut = 30_000)
@@ -183,6 +233,34 @@ public class TestCoordinatorDynamicFiltering
                 TupleDomain.withColumnDomains(ImmutableMap.of(
                         SUPP_KEY_HANDLE,
                         singleValue(BIGINT, 2L))));
+    }
+
+    @Test(timeOut = 30_000)
+    public void testRightJoinWithEmptyBuildSide()
+    {
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem RIGHT JOIN tpch.tiny.supplier ON lineitem.suppkey = supplier.suppkey WHERE supplier.name = 'abc'",
+                TupleDomain.none());
+    }
+
+    @Test(timeOut = 30_000)
+    public void testRightJoinWithNonSelectiveBuildSide()
+    {
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem RIGHT JOIN tpch.tiny.supplier ON lineitem.suppkey = supplier.suppkey",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        Domain.create(ValueSet.ofRanges(range(BIGINT, 1L, true, 100L, true)), false))));
+    }
+
+    @Test(timeOut = 30_000)
+    public void testRightJoinWithSelectiveBuildSide()
+    {
+        assertQueryDynamicFilters(
+                "SELECT * FROM lineitem RIGHT JOIN tpch.tiny.supplier ON lineitem.suppkey = supplier.suppkey WHERE supplier.name = 'Supplier#000000001'",
+                TupleDomain.withColumnDomains(ImmutableMap.of(
+                        SUPP_KEY_HANDLE,
+                        singleValue(BIGINT, 1L))));
     }
 
     @Test(timeOut = 30_000)
@@ -247,7 +325,7 @@ public class TestCoordinatorDynamicFiltering
                 "SELECT * FROM lineitem WHERE lineitem.suppkey IN (SELECT supplier.suppkey FROM tpch.tiny.supplier)",
                 TupleDomain.withColumnDomains(ImmutableMap.of(
                         SUPP_KEY_HANDLE,
-                        Domain.create(ValueSet.ofRanges(Range.range(BIGINT, 1L, true, 100L, true)), false))));
+                        Domain.create(ValueSet.ofRanges(range(BIGINT, 1L, true, 100L, true)), false))));
     }
 
     @Test(timeOut = 30_000)

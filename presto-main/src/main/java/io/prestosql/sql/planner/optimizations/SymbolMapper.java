@@ -15,7 +15,7 @@ package io.prestosql.sql.planner.optimizations;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.prestosql.spi.block.SortOrder;
+import io.prestosql.spi.connector.SortOrder;
 import io.prestosql.sql.planner.OrderingScheme;
 import io.prestosql.sql.planner.PartitioningScheme;
 import io.prestosql.sql.planner.Symbol;
@@ -221,8 +221,10 @@ public class SymbolMapper
                 frame.getType(),
                 frame.getStartType(),
                 frame.getStartValue().map(this::map),
+                frame.getSortKeyCoercedForFrameStartComparison().map(this::map),
                 frame.getEndType(),
                 frame.getEndValue().map(this::map),
+                frame.getSortKeyCoercedForFrameEndComparison().map(this::map),
                 frame.getOriginalStartValue(),
                 frame.getOriginalEndValue());
     }

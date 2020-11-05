@@ -23,10 +23,10 @@ import io.airlift.slice.Slices;
 import io.airlift.units.Duration;
 import io.prestosql.plugin.hive.HiveBasicStatistics;
 import io.prestosql.plugin.hive.HiveBucketProperty;
-import io.prestosql.plugin.hive.HiveConfig;
 import io.prestosql.plugin.hive.HiveModule;
 import io.prestosql.plugin.hive.HiveType;
 import io.prestosql.plugin.hive.PartitionStatistics;
+import io.prestosql.plugin.hive.RecordingMetastoreConfig;
 import io.prestosql.plugin.hive.authentication.HiveIdentity;
 import io.prestosql.plugin.hive.metastore.HivePrivilegeInfo.HivePrivilege;
 import io.prestosql.plugin.hive.metastore.SortingColumn.Order;
@@ -90,7 +90,8 @@ public class TestRecordingHiveMetastore
             ImmutableList.of(TABLE_COLUMN),
             ImmutableMap.of("param", "value3"),
             Optional.of("original_text"),
-            Optional.of("expanded_text"));
+            Optional.of("expanded_text"),
+            OptionalLong.empty());
     private static final Partition PARTITION = new Partition(
             "database",
             "table",
@@ -125,19 +126,19 @@ public class TestRecordingHiveMetastore
     public void testRecordingHiveMetastore()
             throws IOException
     {
-        HiveConfig recordingHiveConfig = new HiveConfig()
+        RecordingMetastoreConfig recordingConfig = new RecordingMetastoreConfig()
                 .setRecordingPath(File.createTempFile("recording_test", "json").getAbsolutePath())
                 .setRecordingDuration(new Duration(10, TimeUnit.MINUTES));
         JsonCodec<RecordingHiveMetastore.Recording> jsonCodec = createJsonCodec();
-        RecordingHiveMetastore recordingHiveMetastore = new RecordingHiveMetastore(new TestingHiveMetastore(), recordingHiveConfig, jsonCodec);
+        RecordingHiveMetastore recordingHiveMetastore = new RecordingHiveMetastore(new TestingHiveMetastore(), recordingConfig, jsonCodec);
         validateMetadata(recordingHiveMetastore);
         recordingHiveMetastore.dropDatabase(HIVE_CONTEXT, "other_database");
         recordingHiveMetastore.writeRecording();
 
-        HiveConfig replayingHiveConfig = recordingHiveConfig
+        RecordingMetastoreConfig replayingConfig = recordingConfig
                 .setReplay(true);
 
-        recordingHiveMetastore = new RecordingHiveMetastore(new UnimplementedHiveMetastore(), replayingHiveConfig, createJsonCodec());
+        recordingHiveMetastore = new RecordingHiveMetastore(new UnimplementedHiveMetastore(), replayingConfig, createJsonCodec());
         recordingHiveMetastore.loadRecording();
         validateMetadata(recordingHiveMetastore);
     }

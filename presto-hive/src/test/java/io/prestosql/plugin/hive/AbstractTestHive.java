@@ -39,6 +39,7 @@ import io.prestosql.plugin.hive.metastore.HiveMetastore;
 import io.prestosql.plugin.hive.metastore.HivePrincipal;
 import io.prestosql.plugin.hive.metastore.HivePrivilegeInfo;
 import io.prestosql.plugin.hive.metastore.HivePrivilegeInfo.HivePrivilege;
+import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.Partition;
 import io.prestosql.plugin.hive.metastore.PartitionWithStatistics;
 import io.prestosql.plugin.hive.metastore.PrincipalPrivileges;
@@ -113,12 +114,14 @@ import io.prestosql.spi.type.SqlTimestamp;
 import io.prestosql.spi.type.SqlTimestampWithTimeZone;
 import io.prestosql.spi.type.SqlVarbinary;
 import io.prestosql.spi.type.Type;
+import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spi.type.VarcharType;
 import io.prestosql.sql.gen.JoinCompiler;
 import io.prestosql.testing.MaterializedResult;
 import io.prestosql.testing.MaterializedRow;
 import io.prestosql.testing.TestingConnectorSession;
 import io.prestosql.testing.TestingNodeManager;
+import io.prestosql.type.BlockTypeOperators;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -177,7 +180,6 @@ import static io.airlift.testing.Assertions.assertGreaterThanOrEqual;
 import static io.airlift.testing.Assertions.assertInstanceOf;
 import static io.airlift.testing.Assertions.assertLessThanOrEqual;
 import static io.airlift.units.DataSize.Unit.KILOBYTE;
-import static io.prestosql.metadata.MetadataManager.createTestMetadataManager;
 import static io.prestosql.plugin.hive.AbstractTestHive.TransactionDeleteInsertTestTag.COMMIT;
 import static io.prestosql.plugin.hive.AbstractTestHive.TransactionDeleteInsertTestTag.ROLLBACK_AFTER_APPEND_PAGE;
 import static io.prestosql.plugin.hive.AbstractTestHive.TransactionDeleteInsertTestTag.ROLLBACK_AFTER_BEGIN_INSERT;
@@ -230,6 +232,7 @@ import static io.prestosql.plugin.hive.HiveType.HIVE_LONG;
 import static io.prestosql.plugin.hive.HiveType.HIVE_STRING;
 import static io.prestosql.plugin.hive.HiveType.toHiveType;
 import static io.prestosql.plugin.hive.LocationHandle.WriteMode.STAGE_AND_MOVE_TO_TARGET_DIRECTORY;
+import static io.prestosql.plugin.hive.acid.AcidTransaction.NO_ACID_TRANSACTION;
 import static io.prestosql.plugin.hive.metastore.HiveColumnStatistics.createBinaryColumnStatistics;
 import static io.prestosql.plugin.hive.metastore.HiveColumnStatistics.createBooleanColumnStatistics;
 import static io.prestosql.plugin.hive.metastore.HiveColumnStatistics.createDateColumnStatistics;
@@ -243,6 +246,7 @@ import static io.prestosql.plugin.hive.util.HiveBucketing.BucketingVersion.BUCKE
 import static io.prestosql.plugin.hive.util.HiveUtil.columnExtraInfo;
 import static io.prestosql.plugin.hive.util.HiveUtil.toPartitionValues;
 import static io.prestosql.plugin.hive.util.HiveWriteUtils.createDirectory;
+import static io.prestosql.plugin.hive.util.HiveWriteUtils.getTableDefaultLocation;
 import static io.prestosql.spi.StandardErrorCode.NOT_SUPPORTED;
 import static io.prestosql.spi.StandardErrorCode.TRANSACTION_CONFLICT;
 import static io.prestosql.spi.connector.ConnectorSplitManager.SplitSchedulingStrategy.UNGROUPED_SCHEDULING;
@@ -280,7 +284,9 @@ import static java.util.concurrent.Executors.newScheduledThreadPool;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.stream.Collectors.toList;
 import static org.apache.hadoop.hive.common.FileUtils.makePartName;
+import static org.apache.hadoop.hive.metastore.TableType.MANAGED_TABLE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.joda.time.DateTimeZone.UTC;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
@@ -461,7 +467,9 @@ public abstract class AbstractTestHive
             // exclude formats that change table schema with serde
             ImmutableSet.of(AVRO, CSV));
 
-    private static final JoinCompiler JOIN_COMPILER = new JoinCompiler(createTestMetadataManager());
+    private static final TypeOperators TYPE_OPERATORS = new TypeOperators();
+    private static final BlockTypeOperators BLOCK_TYPE_OPERATORS = new BlockTypeOperators(TYPE_OPERATORS);
+    private static final JoinCompiler JOIN_COMPILER = new JoinCompiler(TYPE_OPERATORS);
 
     private static final List<ColumnMetadata> STATISTICS_TABLE_COLUMNS = ImmutableList.<ColumnMetadata>builder()
             .add(new ColumnMetadata("t_boolean", BOOLEAN))
@@ -648,7 +656,7 @@ public abstract class AbstractTestHive
         tablePartitionSchemaChangeNonCanonical = new SchemaTableName(database, "presto_test_partition_schema_change_non_canonical");
         tableBucketEvolution = new SchemaTableName(database, "presto_test_bucket_evolution");
 
-        invalidTableHandle = new HiveTableHandle(database, INVALID_TABLE, ImmutableMap.of(), ImmutableList.of(), Optional.empty());
+        invalidTableHandle = new HiveTableHandle(database, INVALID_TABLE, ImmutableMap.of(), ImmutableList.of(), ImmutableList.of(), Optional.empty());
 
         dsColumn = createBaseColumn("ds", -1, HIVE_STRING, VARCHAR, PARTITION_KEY, Optional.empty());
         fileFormatColumn = createBaseColumn("file_format", -1, HIVE_STRING, VARCHAR, PARTITION_KEY, Optional.empty());
@@ -729,7 +737,13 @@ public abstract class AbstractTestHive
 
         hdfsEnvironment = new HdfsEnvironment(createTestHdfsConfiguration(), new HdfsConfig(), new NoHdfsAuthentication());
         HiveMetastore metastore = cachingHiveMetastore(
-                new BridgingHiveMetastore(new ThriftHiveMetastore(metastoreLocator, hiveConfig, new ThriftMetastoreConfig(), hdfsEnvironment, false)),
+                new BridgingHiveMetastore(new ThriftHiveMetastore(
+                        metastoreLocator,
+                        hiveConfig,
+                        new MetastoreConfig(),
+                        new ThriftMetastoreConfig(),
+                        hdfsEnvironment,
+                        false)),
                 executor,
                 Duration.valueOf("1m"),
                 Optional.of(Duration.valueOf("15s")),
@@ -761,6 +775,7 @@ public abstract class AbstractTestHive
                 false,
                 1000,
                 Optional.empty(),
+                true,
                 TYPE_MANAGER,
                 locationService,
                 partitionUpdateCodec,
@@ -791,7 +806,7 @@ public abstract class AbstractTestHive
                 hdfsEnvironment,
                 PAGE_SORTER,
                 metastoreClient,
-                new GroupByHashPageIndexerFactory(JOIN_COMPILER),
+                new GroupByHashPageIndexerFactory(JOIN_COMPILER, BLOCK_TYPE_OPERATORS),
                 TYPE_MANAGER,
                 getHiveConfig(),
                 locationService,
@@ -803,9 +818,11 @@ public abstract class AbstractTestHive
         pageSourceProvider = new HivePageSourceProvider(
                 TYPE_MANAGER,
                 hdfsEnvironment,
+                hiveConfig,
                 getDefaultHivePageSourceFactories(hdfsEnvironment, hiveConfig),
                 getDefaultHiveRecordCursorProviders(hiveConfig, hdfsEnvironment),
-                new GenericHiveRecordCursorProvider(hdfsEnvironment, hiveConfig));
+                new GenericHiveRecordCursorProvider(hdfsEnvironment, hiveConfig),
+                Optional.empty());
     }
 
     protected HdfsConfiguration createTestHdfsConfiguration()
@@ -1746,7 +1763,7 @@ public abstract class AbstractTestHive
 
                 long rowNumber = 0;
                 long completedBytes = 0;
-                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, hiveSplit, tableHandle, columnHandles, TupleDomain.all())) {
+                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, hiveSplit, tableHandle, columnHandles, DynamicFilter.EMPTY)) {
                     MaterializedResult result = materializeSourceDataStream(session, pageSource, getTypes(columnHandles));
 
                     assertPageSourceType(pageSource, fileType);
@@ -1837,7 +1854,7 @@ public abstract class AbstractTestHive
                 int dummyPartition = Integer.parseInt(partitionKeys.get(2).getValue());
 
                 long rowNumber = 0;
-                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, hiveSplit, tableHandle, columnHandles, TupleDomain.all())) {
+                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, hiveSplit, tableHandle, columnHandles, DynamicFilter.EMPTY)) {
                     assertPageSourceType(pageSource, fileType);
                     MaterializedResult result = materializeSourceDataStream(session, pageSource, getTypes(columnHandles));
                     for (MaterializedRow row : result) {
@@ -1876,7 +1893,7 @@ public abstract class AbstractTestHive
                 assertEquals(hiveSplit.getPartitionKeys(), ImmutableList.of());
 
                 long rowNumber = 0;
-                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, tableHandle, columnHandles, TupleDomain.all())) {
+                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, tableHandle, columnHandles, DynamicFilter.EMPTY)) {
                     assertPageSourceType(pageSource, TEXTFILE);
                     MaterializedResult result = materializeSourceDataStream(session, pageSource, getTypes(columnHandles));
 
@@ -1948,7 +1965,7 @@ public abstract class AbstractTestHive
             ConnectorSplit split = getOnlyElement(getAllSplits(splitSource));
 
             ImmutableList<ColumnHandle> columnHandles = ImmutableList.of(column);
-            try (ConnectorPageSource ignored = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, table, columnHandles, TupleDomain.all())) {
+            try (ConnectorPageSource ignored = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, table, columnHandles, DynamicFilter.EMPTY)) {
                 fail("expected exception");
             }
             catch (PrestoException e) {
@@ -2074,21 +2091,6 @@ public abstract class AbstractTestHive
         }
         finally {
             dropTable(tableName);
-        }
-    }
-
-    @Test
-    public void testHiveViewsAreNotSupported()
-    {
-        try (Transaction transaction = newTransaction()) {
-            try {
-                ConnectorMetadata metadata = transaction.getMetadata();
-                getTableHandle(metadata, view);
-                fail("Expected HiveViewNotSupportedException");
-            }
-            catch (HiveViewNotSupportedException e) {
-                assertEquals(e.getTableName(), view);
-            }
         }
     }
 
@@ -2382,7 +2384,7 @@ public abstract class AbstractTestHive
 
             int actualRowCount = 0;
             for (ConnectorSplit split : splits) {
-                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, tableHandle, columnHandles, TupleDomain.all())) {
+                try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, tableHandle, columnHandles, DynamicFilter.EMPTY)) {
                     String lastValueAsc = null;
                     long lastValueDesc = -1;
 
@@ -2575,6 +2577,74 @@ public abstract class AbstractTestHive
     }
 
     @Test
+    public void testHideDeltaLakeTables()
+    {
+        ConnectorSession session = newSession();
+        HiveIdentity identity = new HiveIdentity(session);
+        SchemaTableName tableName = temporaryTable("presto_delta_lake_table");
+
+        Table.Builder table = Table.builder()
+                .setDatabaseName(tableName.getSchemaName())
+                .setTableName(tableName.getTableName())
+                .setOwner(session.getUser())
+                .setTableType(MANAGED_TABLE.name())
+                .setDataColumns(List.of(new Column("a_column", HIVE_STRING, Optional.empty())))
+                .setParameter(HiveMetadata.SPARK_TABLE_PROVIDER_KEY, HiveMetadata.DELTA_LAKE_PROVIDER);
+        table.getStorageBuilder()
+                .setStorageFormat(fromHiveStorageFormat(PARQUET))
+                .setLocation(getTableDefaultLocation(
+                        metastoreClient.getDatabase(tableName.getSchemaName()).orElseThrow(),
+                        new HdfsContext(session.getIdentity()),
+                        hdfsEnvironment,
+                        tableName.getSchemaName(),
+                        tableName.getTableName()).toString());
+        PrincipalPrivileges principalPrivileges = new PrincipalPrivileges(ImmutableMultimap.of(), ImmutableMultimap.of());
+        metastoreClient.createTable(identity, table.build(), principalPrivileges);
+
+        try {
+            // Verify the table was created as a Delta Lake table
+            try (Transaction transaction = newTransaction()) {
+                ConnectorMetadata metadata = transaction.getMetadata();
+                metadata.beginQuery(session);
+                assertThatThrownBy(() -> getTableHandle(metadata, tableName))
+                        .hasMessage("Cannot query Delta Lake table");
+            }
+
+            // Assert that table is hidden
+            try (Transaction transaction = newTransaction()) {
+                ConnectorMetadata metadata = transaction.getMetadata();
+
+                // TODO (https://github.com/prestosql/presto/issues/5426) these assertions should use information_schema instead of metadata directly,
+                //  as information_schema or MetadataManager may apply additional logic
+
+                // list all tables
+                assertThat(metadata.listTables(session, Optional.empty()))
+                        .doesNotContain(tableName);
+
+                // list all tables in a schema
+                assertThat(metadata.listTables(session, Optional.of(tableName.getSchemaName())))
+                        .doesNotContain(tableName);
+
+                // list all columns
+                assertThat(metadata.listTableColumns(session, new SchemaTablePrefix()).keySet())
+                        .doesNotContain(tableName);
+
+                // list all columns in a schema
+                assertThat(metadata.listTableColumns(session, new SchemaTablePrefix(tableName.getSchemaName())).keySet())
+                        .doesNotContain(tableName);
+
+                // list all columns in a table
+                assertThat(metadata.listTableColumns(session, new SchemaTablePrefix(tableName.getSchemaName(), tableName.getTableName())).keySet())
+                        .doesNotContain(tableName);
+            }
+        }
+        finally {
+            // Clean up
+            metastoreClient.dropTable(identity, tableName.getSchemaName(), tableName.getTableName(), true);
+        }
+    }
+
+    @Test
     public void testUpdateBasicTableStatistics()
             throws Exception
     {
@@ -2628,7 +2698,7 @@ public abstract class AbstractTestHive
             metastoreClient.updateTableStatistics(identity, tableName.getSchemaName(), tableName.getTableName(), actualStatistics -> {
                 assertThat(actualStatistics).isEqualTo(expectedStatistics.get());
                 return partitionStatistics;
-            });
+            }, NO_ACID_TRANSACTION);
             assertThat(metastoreClient.getTableStatistics(identity, tableName.getSchemaName(), tableName.getTableName()))
                     .isEqualTo(partitionStatistics);
             expectedStatistics.set(partitionStatistics);
@@ -2640,7 +2710,7 @@ public abstract class AbstractTestHive
         metastoreClient.updateTableStatistics(identity, tableName.getSchemaName(), tableName.getTableName(), actualStatistics -> {
             assertThat(actualStatistics).isEqualTo(expectedStatistics.get());
             return initialStatistics;
-        });
+        }, NO_ACID_TRANSACTION);
 
         assertThat(metastoreClient.getTableStatistics(identity, tableName.getSchemaName(), tableName.getTableName()))
                 .isEqualTo(initialStatistics);
@@ -3936,7 +4006,7 @@ public abstract class AbstractTestHive
     {
         HiveMetastore metastoreClient = getMetastoreClient();
         HiveIdentity identity = new HiveIdentity(SESSION);
-        metastoreClient.updateTableStatistics(identity, schemaTableName.getSchemaName(), schemaTableName.getTableName(), statistics -> new PartitionStatistics(createEmptyStatistics(), ImmutableMap.of()));
+        metastoreClient.updateTableStatistics(identity, schemaTableName.getSchemaName(), schemaTableName.getTableName(), statistics -> new PartitionStatistics(createEmptyStatistics(), ImmutableMap.of()), NO_ACID_TRANSACTION);
         Table table = metastoreClient.getTable(identity, schemaTableName.getSchemaName(), schemaTableName.getTableName())
                 .orElseThrow(() -> new TableNotFoundException(schemaTableName));
         List<String> partitionColumns = table.getPartitionColumns().stream()
@@ -4127,7 +4197,7 @@ public abstract class AbstractTestHive
 
             List<ColumnHandle> columnHandles = ImmutableList.copyOf(metadata.getColumnHandles(session, tableHandle).values());
 
-            ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, hiveSplit, tableHandle, columnHandles, TupleDomain.all());
+            ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, hiveSplit, tableHandle, columnHandles, DynamicFilter.EMPTY);
             assertGetRecords(hiveStorageFormat, tableMetadata, hiveSplit, pageSource, columnHandles);
         }
     }
@@ -4424,7 +4494,7 @@ public abstract class AbstractTestHive
 
         ImmutableList.Builder<MaterializedRow> allRows = ImmutableList.builder();
         for (ConnectorSplit split : splits) {
-            try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, tableHandle, columnHandles, TupleDomain.all())) {
+            try (ConnectorPageSource pageSource = pageSourceProvider.createPageSource(transaction.getTransactionHandle(), session, split, tableHandle, columnHandles, DynamicFilter.EMPTY)) {
                 expectedStorageFormat.ifPresent(format -> assertPageSourceType(pageSource, format));
                 MaterializedResult result = materializeSourceDataStream(session, pageSource, getTypes(columnHandles));
                 allRows.addAll(result.getMaterializedRows());
@@ -4484,14 +4554,14 @@ public abstract class AbstractTestHive
             if (hiveRecordCursor instanceof HiveCoercionRecordCursor) {
                 hiveRecordCursor = ((HiveCoercionRecordCursor) hiveRecordCursor).getRegularColumnRecordCursor();
             }
-            assertInstanceOf(hiveRecordCursor, recordCursorType(hiveStorageFormat), hiveStorageFormat.name());
+            assertInstanceOf(hiveRecordCursor, recordCursorType(), hiveStorageFormat.name());
         }
         else {
             assertInstanceOf(((HivePageSource) pageSource).getPageSource(), pageSourceType(hiveStorageFormat), hiveStorageFormat.name());
         }
     }
 
-    private static Class<? extends RecordCursor> recordCursorType(HiveStorageFormat hiveStorageFormat)
+    private static Class<? extends RecordCursor> recordCursorType()
     {
         return GenericHiveRecordCursor.class;
     }

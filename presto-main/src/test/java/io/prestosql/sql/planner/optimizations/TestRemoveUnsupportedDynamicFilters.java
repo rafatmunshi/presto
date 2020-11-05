@@ -22,13 +22,13 @@ import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.TableHandle;
 import io.prestosql.plugin.tpch.TpchColumnHandle;
 import io.prestosql.plugin.tpch.TpchTableHandle;
+import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.parser.SqlParser;
 import io.prestosql.sql.planner.Plan;
 import io.prestosql.sql.planner.PlanNodeIdAllocator;
 import io.prestosql.sql.planner.Symbol;
 import io.prestosql.sql.planner.SymbolAllocator;
 import io.prestosql.sql.planner.TypeAnalyzer;
-import io.prestosql.sql.planner.TypeProvider;
 import io.prestosql.sql.planner.assertions.BasePlanTest;
 import io.prestosql.sql.planner.assertions.PlanAssert;
 import io.prestosql.sql.planner.assertions.PlanMatchPattern;
@@ -49,6 +49,7 @@ import org.testng.annotations.Test;
 import java.util.Optional;
 
 import static io.prestosql.spi.type.BigintType.BIGINT;
+import static io.prestosql.spi.type.DoubleType.DOUBLE;
 import static io.prestosql.sql.DynamicFilters.createDynamicFilterExpression;
 import static io.prestosql.sql.ExpressionUtils.combineConjuncts;
 import static io.prestosql.sql.ExpressionUtils.combineDisjuncts;
@@ -68,9 +69,11 @@ public class TestRemoveUnsupportedDynamicFilters
         extends BasePlanTest
 {
     private Metadata metadata;
+    private TypeOperators typeOperators = new TypeOperators();
     private PlanBuilder builder;
     private Symbol lineitemOrderKeySymbol;
     private TableScanNode lineitemTableScanNode;
+    private TableHandle lineitemTableHandle;
     private Symbol ordersOrderKeySymbol;
     private TableScanNode ordersTableScanNode;
 
@@ -80,7 +83,7 @@ public class TestRemoveUnsupportedDynamicFilters
         metadata = getQueryRunner().getMetadata();
         builder = new PlanBuilder(new PlanNodeIdAllocator(), metadata);
         CatalogName catalogName = getCurrentConnectorId();
-        TableHandle lineitemTableHandle = new TableHandle(
+        lineitemTableHandle = new TableHandle(
                 catalogName,
                 new TpchTableHandle("lineitem", 1.0),
                 TestingTransactionHandle.create(),
@@ -308,6 +311,40 @@ public class TestRemoveUnsupportedDynamicFilters
     }
 
     @Test
+    public void testRemoveUnsupportedCast()
+    {
+        // Use lineitem with DOUBLE orderkey to simulate the case of implicit casts
+        // Dynamic filter is removed because there isn't an injective mapping from bigint -> double
+        Symbol lineitemDoubleOrderKeySymbol = builder.symbol("LINEITEM_DOUBLE_OK", DOUBLE);
+        PlanNode root = builder.output(ImmutableList.of(), ImmutableList.of(),
+                builder.join(
+                        INNER,
+                        builder.filter(
+                                createDynamicFilterExpression(metadata, new DynamicFilterId("DF"), BIGINT, expression("CAST(LINEITEM_DOUBLE_OK AS BIGINT)")),
+                                builder.tableScan(
+                                        lineitemTableHandle,
+                                        ImmutableList.of(lineitemDoubleOrderKeySymbol),
+                                        ImmutableMap.of(lineitemDoubleOrderKeySymbol, new TpchColumnHandle("orderkey", DOUBLE)))),
+                        ordersTableScanNode,
+                        ImmutableList.of(new JoinNode.EquiJoinClause(lineitemDoubleOrderKeySymbol, ordersOrderKeySymbol)),
+                        ImmutableList.of(lineitemDoubleOrderKeySymbol),
+                        ImmutableList.of(ordersOrderKeySymbol),
+                        Optional.empty(),
+                        Optional.empty(),
+                        Optional.empty(),
+                        ImmutableMap.of(new DynamicFilterId("DF"), ordersOrderKeySymbol)));
+        assertPlan(
+                removeUnsupportedDynamicFilters(root),
+                output(
+                        join(
+                                INNER,
+                                ImmutableList.of(equiJoinClause("LINEITEM_DOUBLE_OK", "ORDERS_OK")),
+                                ImmutableMap.of(),
+                                tableScan("lineitem", ImmutableMap.of("LINEITEM_DOUBLE_OK", "orderkey")),
+                                tableScan("orders", ImmutableMap.of("ORDERS_OK", "orderkey")))));
+    }
+
+    @Test
     public void testSpatialJoin()
     {
         Symbol leftSymbol = builder.symbol("LEFT_SYMBOL", BIGINT);
@@ -441,8 +478,14 @@ public class TestRemoveUnsupportedDynamicFilters
         return getQueryRunner().inTransaction(session -> {
             // metadata.getCatalogHandle() registers the catalog for the transaction
             session.getCatalog().ifPresent(catalog -> metadata.getCatalogHandle(session, catalog));
-            PlanNode rewrittenPlan = new RemoveUnsupportedDynamicFilters(metadata).optimize(root, session, TypeProvider.empty(), new SymbolAllocator(), new PlanNodeIdAllocator(), WarningCollector.NOOP);
-            new DynamicFiltersChecker().validate(rewrittenPlan, session, metadata, new TypeAnalyzer(new SqlParser(), metadata), TypeProvider.empty(), WarningCollector.NOOP);
+            PlanNode rewrittenPlan = new RemoveUnsupportedDynamicFilters(metadata).optimize(root, session, builder.getTypes(), new SymbolAllocator(), new PlanNodeIdAllocator(), WarningCollector.NOOP);
+            new DynamicFiltersChecker().validate(rewrittenPlan,
+                    session,
+                    metadata,
+                    typeOperators,
+                    new TypeAnalyzer(new SqlParser(), metadata),
+                    builder.getTypes(),
+                    WarningCollector.NOOP);
             return rewrittenPlan;
         });
     }

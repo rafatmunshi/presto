@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import io.prestosql.Session;
 import io.prestosql.execution.warnings.WarningCollector;
 import io.prestosql.metadata.Metadata;
+import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.Symbol;
 import io.prestosql.sql.planner.SymbolsExtractor;
 import io.prestosql.sql.planner.TypeAnalyzer;
@@ -88,7 +89,13 @@ public final class ValidateDependenciesChecker
         implements PlanSanityChecker.Checker
 {
     @Override
-    public void validate(PlanNode plan, Session session, Metadata metadata, TypeAnalyzer typeAnalyzer, TypeProvider types, WarningCollector warningCollector)
+    public void validate(PlanNode plan,
+            Session session,
+            Metadata metadata,
+            TypeOperators typeOperators,
+            TypeAnalyzer typeAnalyzer,
+            TypeProvider types,
+            WarningCollector warningCollector)
     {
         validate(plan);
     }
@@ -182,6 +189,17 @@ public final class ValidateDependenciesChecker
                 }
             }
             checkDependencies(inputs, bounds.build(), "Invalid node. Frame bounds (%s) not in source plan output (%s)", bounds.build(), node.getSource().getOutputSymbols());
+
+            ImmutableList.Builder<Symbol> symbolsForFrameBoundsComparison = ImmutableList.builder();
+            for (WindowNode.Frame frame : node.getFrames()) {
+                if (frame.getSortKeyCoercedForFrameStartComparison().isPresent()) {
+                    symbolsForFrameBoundsComparison.add(frame.getSortKeyCoercedForFrameStartComparison().get());
+                }
+                if (frame.getSortKeyCoercedForFrameEndComparison().isPresent()) {
+                    symbolsForFrameBoundsComparison.add(frame.getSortKeyCoercedForFrameEndComparison().get());
+                }
+            }
+            checkDependencies(inputs, symbolsForFrameBoundsComparison.build(), "Invalid node. Symbols for frame bound comparison (%s) not in source plan output (%s)", symbolsForFrameBoundsComparison.build(), node.getSource().getOutputSymbols());
 
             for (WindowNode.Function function : node.getWindowFunctions().values()) {
                 Set<Symbol> dependencies = SymbolsExtractor.extractUnique(function);

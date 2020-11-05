@@ -27,6 +27,7 @@ import io.prestosql.spi.connector.ConnectorPageSource;
 import io.prestosql.spi.connector.ConnectorSession;
 import io.prestosql.spi.type.ArrayType;
 import io.prestosql.spi.type.CharType;
+import io.prestosql.spi.type.LongTimestamp;
 import io.prestosql.spi.type.MapType;
 import io.prestosql.spi.type.RowType;
 import io.prestosql.spi.type.SqlDate;
@@ -42,11 +43,9 @@ import io.prestosql.spi.type.TimestampType;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.VarcharType;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -65,7 +64,6 @@ import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
-import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.BooleanType.BOOLEAN;
 import static io.prestosql.spi.type.DateTimeEncoding.packDateTimeWithZone;
@@ -83,6 +81,7 @@ import static io.prestosql.spi.type.VarbinaryType.VARBINARY;
 import static io.prestosql.type.JsonType.JSON;
 import static java.lang.Float.floatToRawIntBits;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.toSet;
 
 public class MaterializedResult
         implements Iterable<MaterializedRow>
@@ -213,7 +212,9 @@ public class MaterializedResult
 
     public Set<Object> getOnlyColumnAsSet()
     {
-        return getOnlyColumn().collect(toImmutableSet());
+        return getOnlyColumn()
+                // values are nullable
+                .collect(toSet());
     }
 
     public Object getOnlyValue()
@@ -296,8 +297,12 @@ public class MaterializedResult
         }
         else if (type instanceof TimestampType) {
             long micros = ((SqlTimestamp) value).getEpochMicros();
-            int precision = ((TimestampType) type).getPrecision();
-            type.writeLong(blockBuilder, micros);
+            if (((TimestampType) type).getPrecision() <= TimestampType.MAX_SHORT_PRECISION) {
+                type.writeLong(blockBuilder, micros);
+            }
+            else {
+                type.writeObject(blockBuilder, new LongTimestamp(micros, ((SqlTimestamp) value).getPicosOfMicros()));
+            }
         }
         else if (TIMESTAMP_WITH_TIME_ZONE.equals(type)) {
             long millisUtc = ((SqlTimestampWithTimeZone) value).getMillisUtc();
@@ -376,8 +381,7 @@ public class MaterializedResult
                 convertedValue = ((SqlTimestamp) prestoValue).toLocalDateTime();
             }
             else if (prestoValue instanceof SqlTimestampWithTimeZone) {
-                convertedValue = Instant.ofEpochMilli(((SqlTimestampWithTimeZone) prestoValue).getMillisUtc())
-                        .atZone(ZoneId.of(((SqlTimestampWithTimeZone) prestoValue).getTimeZoneKey().getId()));
+                convertedValue = ((SqlTimestampWithTimeZone) prestoValue).toZonedDateTime();
             }
             else if (prestoValue instanceof SqlDecimal) {
                 convertedValue = ((SqlDecimal) prestoValue).toBigDecimal();
@@ -401,7 +405,7 @@ public class MaterializedResult
         while (!pageSource.isFinished()) {
             Page outputPage = pageSource.getNextPage();
             if (outputPage == null) {
-                break;
+                continue;
             }
             builder.page(outputPage);
         }

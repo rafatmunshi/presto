@@ -16,9 +16,6 @@ package io.prestosql.sql.analyzer;
 import com.google.common.collect.ImmutableMap;
 import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
-import io.prestosql.operator.aggregation.arrayagg.ArrayAggGroupImplementation;
-import io.prestosql.operator.aggregation.histogram.HistogramGroupImplementation;
-import io.prestosql.operator.aggregation.multimapagg.MultimapAggGroupImplementation;
 import io.prestosql.sql.analyzer.FeaturesConfig.DataIntegrityVerification;
 import io.prestosql.sql.analyzer.FeaturesConfig.JoinDistributionType;
 import io.prestosql.sql.analyzer.FeaturesConfig.JoinReorderingStrategy;
@@ -54,7 +51,6 @@ public class TestFeaturesConfig
                 .setGroupedExecutionEnabled(false)
                 .setDynamicScheduleForGroupedExecutionEnabled(false)
                 .setConcurrentLifespansPerTask(0)
-                .setFastInequalityJoins(true)
                 .setColocatedJoinsEnabled(false)
                 .setSpatialJoinsEnabled(true)
                 .setJoinReorderingStrategy(JoinReorderingStrategy.AUTOMATIC)
@@ -100,9 +96,6 @@ public class TestFeaturesConfig
                 .setUseMarkDistinct(true)
                 .setPreferPartialAggregation(true)
                 .setOptimizeTopNRowNumber(true)
-                .setHistogramGroupImplementation(HistogramGroupImplementation.NEW)
-                .setArrayAggGroupImplementation(ArrayAggGroupImplementation.NEW)
-                .setMultimapAggGroupImplementation(MultimapAggGroupImplementation.NEW)
                 .setDistributedSortEnabled(true)
                 .setMaxRecursionDepth(10)
                 .setMaxGroupingSets(2048)
@@ -133,7 +126,6 @@ public class TestFeaturesConfig
                 .put("grouped-execution-enabled", "true")
                 .put("dynamic-schedule-for-grouped-execution", "true")
                 .put("concurrent-lifespans-per-task", "1")
-                .put("fast-inequality-joins", "false")
                 .put("colocated-joins-enabled", "true")
                 .put("spatial-joins-enabled", "false")
                 .put("optimizer.join-reordering-strategy", "NONE")
@@ -170,9 +162,6 @@ public class TestFeaturesConfig
                 .put("pages-index.eager-compaction-enabled", "true")
                 .put("filter-and-project-min-output-page-size", "1MB")
                 .put("filter-and-project-min-output-page-row-count", "2048")
-                .put("histogram.implementation", "LEGACY")
-                .put("arrayagg.implementation", "LEGACY")
-                .put("multimapagg.implementation", "LEGACY")
                 .put("optimizer.use-mark-distinct", "false")
                 .put("optimizer.prefer-partial-aggregation", "false")
                 .put("optimizer.optimize-top-n-row-number", "false")
@@ -202,7 +191,6 @@ public class TestFeaturesConfig
                 .setGroupedExecutionEnabled(true)
                 .setDynamicScheduleForGroupedExecutionEnabled(true)
                 .setConcurrentLifespansPerTask(1)
-                .setFastInequalityJoins(false)
                 .setColocatedJoinsEnabled(true)
                 .setSpatialJoinsEnabled(false)
                 .setJoinReorderingStrategy(NONE)
@@ -242,9 +230,6 @@ public class TestFeaturesConfig
                 .setUseMarkDistinct(false)
                 .setPreferPartialAggregation(false)
                 .setOptimizeTopNRowNumber(false)
-                .setHistogramGroupImplementation(HistogramGroupImplementation.LEGACY)
-                .setArrayAggGroupImplementation(ArrayAggGroupImplementation.LEGACY)
-                .setMultimapAggGroupImplementation(MultimapAggGroupImplementation.LEGACY)
                 .setDistributedSortEnabled(false)
                 .setMaxRecursionDepth(8)
                 .setMaxGroupingSets(2047)

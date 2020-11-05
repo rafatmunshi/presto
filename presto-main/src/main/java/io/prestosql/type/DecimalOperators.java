@@ -15,7 +15,6 @@ package io.prestosql.type;
 
 import com.google.common.collect.ImmutableList;
 import io.airlift.slice.Slice;
-import io.airlift.slice.XxHash64;
 import io.prestosql.annotation.UsedByGeneratedCode;
 import io.prestosql.metadata.PolymorphicScalarFunctionBuilder;
 import io.prestosql.metadata.PolymorphicScalarFunctionBuilder.SpecializeContext;
@@ -23,15 +22,12 @@ import io.prestosql.metadata.Signature;
 import io.prestosql.metadata.SignatureBuilder;
 import io.prestosql.metadata.SqlScalarFunction;
 import io.prestosql.spi.PrestoException;
-import io.prestosql.spi.function.IsNull;
 import io.prestosql.spi.function.LiteralParameters;
 import io.prestosql.spi.function.ScalarOperator;
 import io.prestosql.spi.function.SqlType;
 import io.prestosql.spi.type.DecimalType;
 import io.prestosql.spi.type.Decimals;
-import io.prestosql.spi.type.StandardTypes;
 import io.prestosql.spi.type.TypeSignature;
-import io.prestosql.spi.type.UnscaledDecimal128Arithmetic;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -41,20 +37,20 @@ import static io.prestosql.spi.StandardErrorCode.DIVISION_BY_ZERO;
 import static io.prestosql.spi.StandardErrorCode.NUMERIC_VALUE_OUT_OF_RANGE;
 import static io.prestosql.spi.function.OperatorType.ADD;
 import static io.prestosql.spi.function.OperatorType.DIVIDE;
-import static io.prestosql.spi.function.OperatorType.HASH_CODE;
-import static io.prestosql.spi.function.OperatorType.INDETERMINATE;
 import static io.prestosql.spi.function.OperatorType.MODULUS;
 import static io.prestosql.spi.function.OperatorType.MULTIPLY;
 import static io.prestosql.spi.function.OperatorType.NEGATION;
 import static io.prestosql.spi.function.OperatorType.SUBTRACT;
-import static io.prestosql.spi.function.OperatorType.XX_HASH_64;
 import static io.prestosql.spi.type.Decimals.encodeUnscaledValue;
 import static io.prestosql.spi.type.Decimals.longTenToNth;
 import static io.prestosql.spi.type.TypeSignatureParameter.typeVariable;
+import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.add;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.divideRoundUp;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.isZero;
+import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.multiply;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.remainder;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.rescale;
+import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.subtract;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.throwIfOverflows;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.unscaledDecimal;
 import static io.prestosql.spi.type.UnscaledDecimal128Arithmetic.unscaledDecimalToUnscaledLong;
@@ -124,13 +120,32 @@ public final class DecimalOperators
     @UsedByGeneratedCode
     public static Slice addShortLongLong(long a, Slice b, int rescale, boolean left)
     {
-        return internalAddLongLongLong(unscaledDecimal(a), b, rescale, left);
+        return addLongShortLong(b, a, rescale, !left);
     }
 
     @UsedByGeneratedCode
-    public static Slice addLongShortLong(Slice a, long b, int rescale, boolean left)
+    public static Slice addLongShortLong(Slice a, long b, int rescale, boolean rescaleLeft)
     {
-        return internalAddLongLongLong(a, unscaledDecimal(b), rescale, left);
+        try {
+            Slice left;
+            Slice right;
+
+            if (rescaleLeft) {
+                left = rescale(a, rescale);
+                right = unscaledDecimal(b);
+            }
+            else {
+                left = rescale(b, rescale);
+                right = a;
+            }
+
+            add(left, right, left);
+            throwIfOverflows(left);
+            return left;
+        }
+        catch (ArithmeticException e) {
+            throw new PrestoException(NUMERIC_VALUE_OUT_OF_RANGE, "Decimal overflow", e);
+        }
     }
 
     private static Slice internalAddLongLongLong(Slice a, Slice b, int rescale, boolean rescaleLeft)
@@ -148,7 +163,7 @@ public final class DecimalOperators
                 right = a;
             }
 
-            UnscaledDecimal128Arithmetic.add(left, right, left);
+            add(left, right, left);
             throwIfOverflows(left);
             return left;
         }
@@ -220,11 +235,11 @@ public final class DecimalOperators
             Slice tmp = unscaledDecimal();
             if (rescaleLeft) {
                 rescale(a, rescale, tmp);
-                UnscaledDecimal128Arithmetic.subtract(tmp, b, tmp);
+                subtract(tmp, b, tmp);
             }
             else {
                 rescale(b, rescale, tmp);
-                UnscaledDecimal128Arithmetic.subtract(a, tmp, tmp);
+                subtract(a, tmp, tmp);
             }
             throwIfOverflows(tmp);
             return tmp;
@@ -266,14 +281,21 @@ public final class DecimalOperators
     @UsedByGeneratedCode
     public static Slice multiplyShortShortLong(long a, long b)
     {
-        return multiplyLongLongLong(encodeUnscaledValue(a), encodeUnscaledValue(b));
+        try {
+            Slice result = multiply(a, b);
+            throwIfOverflows(result);
+            return result;
+        }
+        catch (ArithmeticException e) {
+            throw new PrestoException(NUMERIC_VALUE_OUT_OF_RANGE, "Decimal overflow", e);
+        }
     }
 
     @UsedByGeneratedCode
     public static Slice multiplyLongLongLong(Slice a, Slice b)
     {
         try {
-            Slice result = UnscaledDecimal128Arithmetic.multiply(a, b);
+            Slice result = multiply(a, b);
             throwIfOverflows(result);
             return result;
         }
@@ -285,13 +307,20 @@ public final class DecimalOperators
     @UsedByGeneratedCode
     public static Slice multiplyShortLongLong(long a, Slice b)
     {
-        return multiplyLongLongLong(encodeUnscaledValue(a), b);
+        return multiplyLongShortLong(b, a);
     }
 
     @UsedByGeneratedCode
     public static Slice multiplyLongShortLong(Slice a, long b)
     {
-        return multiplyLongLongLong(a, encodeUnscaledValue(b));
+        try {
+            Slice result = multiply(a, b);
+            throwIfOverflows(result);
+            return result;
+        }
+        catch (ArithmeticException e) {
+            throw new PrestoException(NUMERIC_VALUE_OUT_OF_RANGE, "Decimal overflow", e);
+        }
     }
 
     private static SqlScalarFunction decimalDivideOperator()
@@ -621,60 +650,6 @@ public final class DecimalOperators
         {
             BigInteger argBigInteger = Decimals.decodeUnscaledValue(arg);
             return encodeUnscaledValue(argBigInteger.negate());
-        }
-    }
-
-    @ScalarOperator(HASH_CODE)
-    public static final class HashCode
-    {
-        @LiteralParameters({"p", "s"})
-        @SqlType(StandardTypes.BIGINT)
-        public static long hashCode(@SqlType("decimal(p, s)") long value)
-        {
-            return value;
-        }
-
-        @LiteralParameters({"p", "s"})
-        @SqlType(StandardTypes.BIGINT)
-        public static long hashCode(@SqlType("decimal(p, s)") Slice value)
-        {
-            return UnscaledDecimal128Arithmetic.hash(value);
-        }
-    }
-
-    @ScalarOperator(INDETERMINATE)
-    public static final class Indeterminate
-    {
-        @LiteralParameters({"p", "s"})
-        @SqlType(StandardTypes.BOOLEAN)
-        public static boolean indeterminate(@SqlType("decimal(p, s)") long value, @IsNull boolean isNull)
-        {
-            return isNull;
-        }
-
-        @LiteralParameters({"p", "s"})
-        @SqlType(StandardTypes.BOOLEAN)
-        public static boolean indeterminate(@SqlType("decimal(p, s)") Slice value, @IsNull boolean isNull)
-        {
-            return isNull;
-        }
-    }
-
-    @ScalarOperator(XX_HASH_64)
-    public static final class XxHash64Operator
-    {
-        @LiteralParameters({"p", "s"})
-        @SqlType(StandardTypes.BIGINT)
-        public static long xxHash64(@SqlType("decimal(p, s)") long value)
-        {
-            return XxHash64.hash(value);
-        }
-
-        @LiteralParameters({"p", "s"})
-        @SqlType(StandardTypes.BIGINT)
-        public static long xxHash64(@SqlType("decimal(p, s)") Slice value)
-        {
-            return XxHash64.hash(value);
         }
     }
 }

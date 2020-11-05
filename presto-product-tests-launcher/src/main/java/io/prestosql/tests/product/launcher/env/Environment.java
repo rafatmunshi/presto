@@ -19,7 +19,6 @@ import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.Ulimit;
 import com.google.common.base.Joiner;
-import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Streams;
@@ -48,24 +47,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Throwables.getStackTraceAsString;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static io.prestosql.tests.product.launcher.env.DockerContainer.ensurePathExists;
 import static io.prestosql.tests.product.launcher.env.EnvironmentContainers.TESTS;
 import static io.prestosql.tests.product.launcher.env.Environments.pruneEnvironment;
 import static java.lang.String.format;
 import static java.time.Duration.ofMinutes;
 import static java.util.Objects.requireNonNull;
+import static java.util.concurrent.Executors.newCachedThreadPool;
 
 public final class Environment
         implements AutoCloseable
 {
+    private static final ExecutorService executorService = newCachedThreadPool(daemonThreadsNamed("environment-%d"));
+    private static final Logger log = Logger.get(Environment.class);
+
     public static final String PRODUCT_TEST_LAUNCHER_STARTED_LABEL_NAME = Environment.class.getName() + ".ptl-started";
     public static final String PRODUCT_TEST_LAUNCHER_STARTED_LABEL_VALUE = "true";
     public static final String PRODUCT_TEST_LAUNCHER_NETWORK = "ptl-network";
@@ -73,19 +79,24 @@ public final class Environment
 
     public static final Integer ENVIRONMENT_FAILED_EXIT_CODE = 99;
 
-    private static final Logger log = Logger.get(Environment.class);
-
     private final String name;
     private final int startupRetries;
     private final Map<String, DockerContainer> containers;
     private final Optional<EnvironmentListener> listener;
+    private final boolean attached;
 
-    private Environment(String name, int startupRetries, Map<String, DockerContainer> containers, Optional<EnvironmentListener> listener)
+    private Environment(
+            String name,
+            int startupRetries,
+            Map<String, DockerContainer> containers,
+            Optional<EnvironmentListener> listener,
+            boolean attached)
     {
         this.name = requireNonNull(name, "name is null");
         this.startupRetries = startupRetries;
         this.containers = requireNonNull(containers, "containers is null");
         this.listener = requireNonNull(listener, "listener is null");
+        this.attached = attached;
     }
 
     public Environment start()
@@ -99,7 +110,8 @@ public final class Environment
 
         return Failsafe
                 .with(retryPolicy)
-                .get(() -> tryStart());
+                .with(executorService)
+                .get(this::tryStart);
     }
 
     public List<String> getContainerNames()
@@ -113,15 +125,24 @@ public final class Environment
     {
         pruneEnvironment();
 
+        // Reset containerId so that containers can start when failed in previous attempt
+        List<DockerContainer> containers = ImmutableList.copyOf(this.containers.values());
+        for (DockerContainer container : containers) {
+            container.reset();
+        }
+
         // Create new network when environment tries to start
         try (Network network = createNetwork(name)) {
-            List<DockerContainer> containers = ImmutableList.copyOf(this.containers.values());
             attachNetwork(containers, network);
 
             String containerNames = Joiner.on(", ").join(getContainerNames());
-
             log.info("Starting containers %s for environment %s", containerNames, name);
+
             Startables.deepStart(containers).get();
+
+            // After deepStart all containers should be running and healthy
+            checkState(allContainersHealthy(containers), "Not all containers are running or healthy");
+
             this.listener.ifPresent(listener -> listener.environmentStarted(this));
             return this;
         }
@@ -129,13 +150,14 @@ public final class Environment
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
         }
-        catch (ExecutionException e) {
+        catch (ExecutionException | RuntimeException e) {
             throw new RuntimeException(e);
         }
     }
 
     public void stop()
     {
+        checkState(!attached, "Cannot stop environment that is attached");
         this.listener.ifPresent(listener -> listener.environmentStopping(this));
 
         // Allow containers to take up to 5 minutes to stop
@@ -145,7 +167,9 @@ public final class Environment
         RetryPolicy retry = new RetryPolicy()
                 .withMaxAttempts(3);
 
-        FailsafeExecutor<Object> executor = Failsafe.with(timeout, retry);
+        FailsafeExecutor<Object> executor = Failsafe
+                .with(timeout, retry)
+                .with(executorService);
 
         ImmutableList.copyOf(containers.values())
                 .stream()
@@ -169,14 +193,12 @@ public final class Environment
             }
 
             log.warn("Some of the containers are stopped or unhealthy");
-
-            return;
         }
         catch (InterruptedException e) {
             log.info("Interrupted");
             // It's OK not to restore interrupt flag here. When we return we're exiting the process.
         }
-        catch (Exception e) {
+        catch (RuntimeException e) {
             log.warn("Could not query for containers state: %s", getStackTraceAsString(e));
         }
     }
@@ -195,7 +217,7 @@ public final class Environment
             while (testContainer.isRunning()) {
                 Thread.sleep(10000); // check every 10 seconds
 
-                if (!allContainersHealthy(containers)) {
+                if (!attached && !allContainersHealthy(containers)) {
                     log.warn("Environment %s is not healthy, interrupting tests", name);
                     return ENVIRONMENT_FAILED_EXIT_CODE;
                 }
@@ -242,11 +264,16 @@ public final class Environment
     @Override
     public void close()
     {
+        if (attached) {
+            // do not stop attached, externally controlled environment
+            return;
+        }
+
         try {
             stop();
         }
-        catch (Exception e) {
-            log.warn("Exception occured while closing environment: %s", getStackTraceAsString(e));
+        catch (RuntimeException e) {
+            log.warn("Exception occurred while closing environment: %s", getStackTraceAsString(e));
         }
     }
 
@@ -297,6 +324,7 @@ public final class Environment
         private int startupRetries = 1;
         private Map<String, DockerContainer> containers = new HashMap<>();
         private Optional<Path> logsBaseDir = Optional.empty();
+        private boolean attached;
 
         public Builder(String name)
         {
@@ -306,6 +334,15 @@ public final class Environment
         public String getEnvironmentName()
         {
             return name;
+        }
+
+        public Builder containerDependsOn(String container, String dependencyContainer)
+        {
+            checkState(containers.containsKey(container), "Container with name %s is not registered", name);
+            checkState(containers.containsKey(dependencyContainer), "Dependency container with name %s is not registered", dependencyContainer);
+            containers.get(container).dependsOn(containers.get(dependencyContainer));
+
+            return this;
         }
 
         public Builder addContainers(DockerContainer... containers)
@@ -360,24 +397,10 @@ public final class Environment
         private static List<Ulimit> standardUlimits()
         {
             return ImmutableList.of(
-                // Number of open file descriptors
-                new Ulimit("nofile", 65535L, 65535L),
-                // Number of processes
-                new Ulimit("nproc", 8096L, 8096L));
-        }
-
-        public Builder containerDependsOnRest(String logicalName)
-        {
-            checkState(containers.containsKey(logicalName), "Container with name %s does not exist", logicalName);
-            DockerContainer container = containers.get(logicalName);
-
-            containers.entrySet()
-                    .stream()
-                    .filter(entry -> !entry.getKey().equals(logicalName))
-                    .map(entry -> entry.getValue())
-                    .forEach(dependant -> container.dependsOn(dependant));
-
-            return this;
+                    // Number of open file descriptors
+                    new Ulimit("nofile", 65535L, 65535L),
+                    // Number of processes
+                    new Ulimit("nproc", 8096L, 8096L));
         }
 
         public Builder configureContainer(String logicalName, Consumer<DockerContainer> configurer)
@@ -449,11 +472,11 @@ public final class Environment
             switch (outputMode) {
                 case DISCARD:
                     log.warn("Containers logs are not printed to stdout");
-                    setContainerOutputConsumer(this::discardContainerLogs);
+                    setContainerOutputConsumer(Environment.Builder::discardContainerLogs);
                     break;
 
                 case PRINT:
-                    setContainerOutputConsumer(this::printContainerLogs);
+                    setContainerOutputConsumer(Environment.Builder::printContainerLogs);
                     break;
 
                 case PRINT_WRITE:
@@ -482,10 +505,10 @@ public final class Environment
                         });
             });
 
-            return new Environment(name, startupRetries, containers, listener);
+            return new Environment(name, startupRetries, containers, listener, attached);
         }
 
-        private Consumer<OutputFrame> writeContainerLogs(DockerContainer container, Path path)
+        private static Consumer<OutputFrame> writeContainerLogs(DockerContainer container, Path path)
         {
             Path containerLogFile = path.resolve(container.getLogicalName() + "/container.log");
             log.info("Writing container %s logs to %s", container, containerLogFile);
@@ -499,7 +522,7 @@ public final class Environment
             }
         }
 
-        private Consumer<OutputFrame> printContainerLogs(DockerContainer container)
+        private static Consumer<OutputFrame> printContainerLogs(DockerContainer container)
         {
             try {
                 // write directly to System.out, bypassing logging & io.airlift.log.Logging#rewireStdStreams
@@ -512,13 +535,13 @@ public final class Environment
             }
         }
 
-        private Consumer<OutputFrame> discardContainerLogs(DockerContainer container)
+        private static Consumer<OutputFrame> discardContainerLogs(DockerContainer container)
         {
             // Discard log frames
             return outputFrame -> {};
         }
 
-        private Consumer<OutputFrame> combineConsumers(Consumer<OutputFrame>... consumers)
+        private static Consumer<OutputFrame> combineConsumers(Consumer<OutputFrame>... consumers)
         {
             return outputFrame -> Arrays.stream(consumers).forEach(consumer -> consumer.accept(outputFrame));
         }
@@ -531,6 +554,12 @@ public final class Environment
         public Builder setLogsBaseDir(Optional<Path> baseDir)
         {
             this.logsBaseDir = baseDir;
+            return this;
+        }
+
+        public Builder setAttached(boolean attached)
+        {
+            this.attached = attached;
             return this;
         }
     }

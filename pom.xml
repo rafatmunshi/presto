@@ -5,12 +5,12 @@
     <parent>
         <groupId>io.airlift</groupId>
         <artifactId>airbase</artifactId>
-        <version>102</version>
+        <version>103</version>
     </parent>
 
     <groupId>io.prestosql</groupId>
     <artifactId>presto-root</artifactId>
-    <version>344-SNAPSHOT</version>
+    <version>346-SNAPSHOT</version>
 
     <name>presto-root</name>
     <description>Presto</description>
@@ -45,8 +45,8 @@
 
         <dep.accumulo.version>1.7.4</dep.accumulo.version>
         <dep.accumulo-hadoop.version>2.7.7-1</dep.accumulo-hadoop.version>
-        <dep.antlr.version>4.7.1</dep.antlr.version>
-        <dep.airlift.version>200</dep.airlift.version>
+        <dep.antlr.version>4.8</dep.antlr.version>
+        <dep.airlift.version>201</dep.airlift.version>
         <dep.packaging.version>${dep.airlift.version}</dep.packaging.version>
         <dep.aws-sdk.version>1.11.749</dep.aws-sdk.version>
         <dep.okhttp.version>3.9.0</dep.okhttp.version>
@@ -57,6 +57,7 @@
         <dep.gcs.version>2.0.0</dep.gcs.version>
         <dep.errorprone.version>2.4.0</dep.errorprone.version>
         <dep.joda.version>2.10.6</dep.joda.version>
+        <dep.coral.version>1.0.8</dep.coral.version>
 
         <!--
           America/Bahia_Banderas has:
@@ -164,6 +165,13 @@
             <dependency>
                 <groupId>io.prestosql</groupId>
                 <artifactId>presto-base-jdbc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.prestosql</groupId>
+                <artifactId>presto-base-jdbc</artifactId>
+                <type>test-jar</type>
                 <version>${project.version}</version>
             </dependency>
 
@@ -504,7 +512,7 @@
             <dependency>
                 <groupId>io.prestosql.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>3.1.2-3</version>
+                <version>3.1.2-4</version>
             </dependency>
 
             <dependency>
@@ -783,7 +791,7 @@
             <dependency>
                 <groupId>io.airlift.resolver</groupId>
                 <artifactId>resolver</artifactId>
-                <version>1.5</version>
+                <version>1.6</version>
             </dependency>
 
             <!-- 3rd party -->
@@ -983,6 +991,41 @@
             </dependency>
 
             <dependency>
+                <groupId>com.linkedin.calcite</groupId>
+                <artifactId>calcite-core</artifactId>
+                <version>1.21.0.140</version>
+                <classifier>shaded</classifier>
+                <exclusions>
+                    <exclusion>
+                        <groupId>*</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.linkedin.coral</groupId>
+                <artifactId>coral-hive</artifactId>
+                <version>${dep.coral.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.hive</groupId>
+                        <artifactId>hive-metastore</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hadoop</groupId>
+                        <artifactId>hadoop-common</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>com.linkedin.coral</groupId>
+                <artifactId>coral-presto</artifactId>
+                <version>${dep.coral.version}</version>
+            </dependency>
+
+            <dependency>
                 <groupId>com.microsoft.sqlserver</groupId>
                 <artifactId>mssql-jdbc</artifactId>
                 <version>7.0.0.jre8</version>
@@ -991,7 +1034,7 @@
             <dependency>
                 <groupId>com.qubole.rubix</groupId>
                 <artifactId>rubix-presto-shaded</artifactId>
-                <version>0.3.16</version>
+                <version>0.3.18</version>
             </dependency>
 
             <dependency>
@@ -1063,7 +1106,7 @@
             <dependency>
                 <groupId>org.alluxio</groupId>
                 <artifactId>alluxio-shaded-client</artifactId>
-                <version>2.3.0</version>
+                <version>2.4.0</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.slf4j</groupId>
@@ -1367,6 +1410,12 @@
                     <groupId>ca.vanzyl.provisio.maven.plugins</groupId>
                     <artifactId>provisio-maven-plugin</artifactId>
                     <version>1.0.9</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>pl.project13.maven</groupId>
+                    <artifactId>git-commit-id-plugin</artifactId>
+                    <version>4.0.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>

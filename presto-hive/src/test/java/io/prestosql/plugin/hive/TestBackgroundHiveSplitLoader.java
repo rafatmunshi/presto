@@ -56,6 +56,8 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
@@ -100,6 +102,7 @@ import static io.prestosql.plugin.hive.HiveTestUtils.TYPE_MANAGER;
 import static io.prestosql.plugin.hive.HiveTestUtils.getHiveSession;
 import static io.prestosql.plugin.hive.HiveType.HIVE_INT;
 import static io.prestosql.plugin.hive.HiveType.HIVE_STRING;
+import static io.prestosql.plugin.hive.acid.AcidTransaction.NO_ACID_TRANSACTION;
 import static io.prestosql.plugin.hive.util.HiveBucketing.BucketingVersion.BUCKETING_V1;
 import static io.prestosql.plugin.hive.util.HiveUtil.getRegularColumnHandles;
 import static io.prestosql.spi.StandardErrorCode.NOT_SUPPORTED;
@@ -114,22 +117,18 @@ import static java.util.concurrent.Executors.newCachedThreadPool;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
 public class TestBackgroundHiveSplitLoader
 {
     private static final int BUCKET_COUNT = 2;
-    private static final int TIMESTAMP_PRECISION = 3;
 
     private static final String SAMPLE_PATH = "hdfs://VOL1:9000/db_name/table_name/000000_0";
     private static final String SAMPLE_PATH_FILTERED = "hdfs://VOL1:9000/db_name/table_name/000000_1";
 
     private static final Path RETURNED_PATH = new Path(SAMPLE_PATH);
     private static final Path FILTERED_PATH = new Path(SAMPLE_PATH_FILTERED);
-
-    private static final ExecutorService EXECUTOR = newCachedThreadPool(daemonThreadsNamed("test-%s"));
 
     private static final TupleDomain<HiveColumnHandle> RETURNED_PATH_DOMAIN = withColumnDomains(
             ImmutableMap.of(
@@ -150,6 +149,21 @@ public class TestBackgroundHiveSplitLoader
 
     private static final Table SIMPLE_TABLE = table(ImmutableList.of(), Optional.empty(), ImmutableMap.of());
     private static final Table PARTITIONED_TABLE = table(PARTITION_COLUMNS, BUCKET_PROPERTY, ImmutableMap.of());
+
+    private ExecutorService executor;
+
+    @BeforeClass
+    public void setUp()
+    {
+        executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-%s"));
+    }
+
+    @AfterClass(alwaysRun = true)
+    public void tearDown()
+    {
+        executor.shutdownNow();
+        executor = null;
+    }
 
     @Test
     public void testNoPathFilter()
@@ -307,7 +321,7 @@ public class TestBackgroundHiveSplitLoader
                 PARTITIONED_TABLE,
                 Optional.of(
                         new HiveBucketHandle(
-                                getRegularColumnHandles(PARTITIONED_TABLE, TYPE_MANAGER, TIMESTAMP_PRECISION),
+                                getRegularColumnHandles(PARTITIONED_TABLE, TYPE_MANAGER, HiveTimestampPrecision.MILLISECONDS),
                                 BUCKETING_V1,
                                 BUCKET_COUNT,
                                 BUCKET_COUNT)));
@@ -343,8 +357,12 @@ public class TestBackgroundHiveSplitLoader
         HiveSplitSource hiveSplitSource = hiveSplitSource(backgroundHiveSplitLoader);
         backgroundHiveSplitLoader.start(hiveSplitSource);
 
-        assertThrows(RuntimeException.class, () -> drain(hiveSplitSource));
-        assertThrows(RuntimeException.class, hiveSplitSource::isFinished);
+        assertThatThrownBy(() -> drain(hiveSplitSource))
+                .isInstanceOf(PrestoException.class)
+                .hasMessage("OFFLINE");
+        assertThatThrownBy(hiveSplitSource::isFinished)
+                .isInstanceOf(PrestoException.class)
+                .hasMessage("OFFLINE");
     }
 
     @Test(timeOut = 30_000)
@@ -400,11 +418,11 @@ public class TestBackgroundHiveSplitLoader
         CachingDirectoryLister cachingDirectoryLister = new CachingDirectoryLister(new Duration(5, TimeUnit.MINUTES), 1000, ImmutableList.of("test_dbname.test_table"));
         assertEquals(cachingDirectoryLister.getRequestCount(), 0);
 
-        int totalCount = 1000;
+        int totalCount = 100;
         CountDownLatch firstVisit = new CountDownLatch(1);
         List<Future<List<HiveSplit>>> futures = new ArrayList<>();
 
-        futures.add(EXECUTOR.submit(() -> {
+        futures.add(executor.submit(() -> {
             BackgroundHiveSplitLoader backgroundHiveSplitLoader = backgroundHiveSplitLoader(TEST_FILES, cachingDirectoryLister);
             HiveSplitSource hiveSplitSource = hiveSplitSource(backgroundHiveSplitLoader);
             backgroundHiveSplitLoader.start(hiveSplitSource);
@@ -417,7 +435,7 @@ public class TestBackgroundHiveSplitLoader
         }));
 
         for (int i = 0; i < totalCount - 1; i++) {
-            futures.add(EXECUTOR.submit(() -> {
+            futures.add(executor.submit(() -> {
                 firstVisit.await();
                 BackgroundHiveSplitLoader backgroundHiveSplitLoader = backgroundHiveSplitLoader(TEST_FILES, cachingDirectoryLister);
                 HiveSplitSource hiveSplitSource = hiveSplitSource(backgroundHiveSplitLoader);
@@ -481,6 +499,7 @@ public class TestBackgroundHiveSplitLoader
 
         BackgroundHiveSplitLoader backgroundHiveSplitLoader = new BackgroundHiveSplitLoader(
                 SIMPLE_TABLE,
+                NO_ACID_TRANSACTION,
                 () -> new Iterator<>()
                 {
                     private boolean threw;
@@ -512,7 +531,7 @@ public class TestBackgroundHiveSplitLoader
                 new TestingHdfsEnvironment(TEST_FILES),
                 new NamenodeStats(),
                 new CachingDirectoryLister(new HiveConfig()),
-                EXECUTOR,
+                executor,
                 threads,
                 false,
                 false,
@@ -754,7 +773,7 @@ public class TestBackgroundHiveSplitLoader
         return splits.build();
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(
             DynamicFilter dynamicFilter,
             Duration dynamicFilteringProbeBlockingTimeoutMillis)
     {
@@ -769,7 +788,7 @@ public class TestBackgroundHiveSplitLoader
                 Optional.empty());
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(
             List<LocatedFileStatus> files,
             TupleDomain<HiveColumnHandle> tupleDomain)
     {
@@ -781,7 +800,7 @@ public class TestBackgroundHiveSplitLoader
                 Optional.empty());
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(
             List<LocatedFileStatus> files,
             TupleDomain<HiveColumnHandle> compactEffectivePredicate,
             Optional<HiveBucketFilter> hiveBucketFilter,
@@ -797,7 +816,7 @@ public class TestBackgroundHiveSplitLoader
                 Optional.empty());
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(
             List<LocatedFileStatus> files,
             TupleDomain<HiveColumnHandle> compactEffectivePredicate,
             Optional<HiveBucketFilter> hiveBucketFilter,
@@ -814,7 +833,7 @@ public class TestBackgroundHiveSplitLoader
                 validWriteIds);
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(
             HdfsEnvironment hdfsEnvironment,
             TupleDomain<HiveColumnHandle> compactEffectivePredicate,
             Optional<HiveBucketFilter> hiveBucketFilter,
@@ -833,7 +852,7 @@ public class TestBackgroundHiveSplitLoader
                 validWriteIds);
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(
             HdfsEnvironment hdfsEnvironment,
             TupleDomain<HiveColumnHandle> compactEffectivePredicate,
             DynamicFilter dynamicFilter,
@@ -852,6 +871,7 @@ public class TestBackgroundHiveSplitLoader
 
         return new BackgroundHiveSplitLoader(
                 table,
+                NO_ACID_TRANSACTION,
                 hivePartitionMetadatas,
                 compactEffectivePredicate,
                 dynamicFilter,
@@ -862,14 +882,14 @@ public class TestBackgroundHiveSplitLoader
                 hdfsEnvironment,
                 new NamenodeStats(),
                 new CachingDirectoryLister(new HiveConfig()),
-                EXECUTOR,
+                executor,
                 2,
                 false,
                 false,
                 validWriteIds);
     }
 
-    private static BackgroundHiveSplitLoader backgroundHiveSplitLoader(List<LocatedFileStatus> files, DirectoryLister directoryLister)
+    private BackgroundHiveSplitLoader backgroundHiveSplitLoader(List<LocatedFileStatus> files, DirectoryLister directoryLister)
     {
         List<HivePartitionMetadata> hivePartitionMetadatas = ImmutableList.of(
                 new HivePartitionMetadata(
@@ -882,6 +902,7 @@ public class TestBackgroundHiveSplitLoader
 
         return new BackgroundHiveSplitLoader(
                 SIMPLE_TABLE,
+                NO_ACID_TRANSACTION,
                 hivePartitionMetadatas,
                 TupleDomain.none(),
                 DynamicFilter.EMPTY,
@@ -892,7 +913,7 @@ public class TestBackgroundHiveSplitLoader
                 new TestingHdfsEnvironment(files),
                 new NamenodeStats(),
                 directoryLister,
-                EXECUTOR,
+                executor,
                 2,
                 false,
                 false,
@@ -906,6 +927,7 @@ public class TestBackgroundHiveSplitLoader
 
         return new BackgroundHiveSplitLoader(
                 SIMPLE_TABLE,
+                NO_ACID_TRANSACTION,
                 createPartitionMetadataWithOfflinePartitions(),
                 TupleDomain.all(),
                 DynamicFilter.EMPTY,
@@ -951,7 +973,7 @@ public class TestBackgroundHiveSplitLoader
         };
     }
 
-    private static HiveSplitSource hiveSplitSource(HiveSplitLoader hiveSplitLoader)
+    private HiveSplitSource hiveSplitSource(HiveSplitLoader hiveSplitLoader)
     {
         return HiveSplitSource.allAtOnce(
                 SESSION,
@@ -962,7 +984,7 @@ public class TestBackgroundHiveSplitLoader
                 DataSize.of(32, MEGABYTE),
                 Integer.MAX_VALUE,
                 hiveSplitLoader,
-                EXECUTOR,
+                executor,
                 new CounterStat());
     }
 

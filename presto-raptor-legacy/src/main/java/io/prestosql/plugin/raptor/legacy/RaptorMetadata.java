@@ -113,7 +113,7 @@ import static io.prestosql.spi.StandardErrorCode.ALREADY_EXISTS;
 import static io.prestosql.spi.StandardErrorCode.INVALID_TABLE_PROPERTY;
 import static io.prestosql.spi.StandardErrorCode.NOT_FOUND;
 import static io.prestosql.spi.StandardErrorCode.NOT_SUPPORTED;
-import static io.prestosql.spi.block.SortOrder.ASC_NULLS_FIRST;
+import static io.prestosql.spi.connector.SortOrder.ASC_NULLS_FIRST;
 import static io.prestosql.spi.type.DateType.DATE;
 import static io.prestosql.spi.type.IntegerType.INTEGER;
 import static io.prestosql.spi.type.TimestampType.TIMESTAMP_MILLIS;
@@ -708,10 +708,10 @@ public class RaptorMetadata
         RaptorTableHandle handle = (RaptorTableHandle) tableHandle;
         long tableId = handle.getTableId();
 
-        ImmutableList.Builder<RaptorColumnHandle> columnHandles = ImmutableList.builder();
+        ImmutableList.Builder<RaptorColumnHandle> columnHandlesBuilder = ImmutableList.builder();
         ImmutableList.Builder<Type> columnTypes = ImmutableList.builder();
         for (TableColumn column : dao.listTableColumns(tableId)) {
-            columnHandles.add(new RaptorColumnHandle(column.getColumnName(), column.getColumnId(), column.getDataType()));
+            columnHandlesBuilder.add(new RaptorColumnHandle(column.getColumnName(), column.getColumnId(), column.getDataType()));
             columnTypes.add(column.getDataType());
         }
 
@@ -723,15 +723,16 @@ public class RaptorMetadata
         List<RaptorColumnHandle> sortColumnHandles = getSortColumnHandles(tableId);
         List<RaptorColumnHandle> bucketColumnHandles = getBucketColumnHandles(tableId);
 
+        ImmutableList<RaptorColumnHandle> columnHandles = columnHandlesBuilder.build();
         Optional<RaptorColumnHandle> temporalColumnHandle = Optional.ofNullable(dao.getTemporalColumnId(tableId))
-                .map(temporalColumnId -> getOnlyElement(columnHandles.build().stream()
+                .map(temporalColumnId -> getOnlyElement(columnHandles.stream()
                         .filter(columnHandle -> columnHandle.getColumnId() == temporalColumnId)
                         .collect(toList())));
 
         return new RaptorInsertTableHandle(
                 transactionId,
                 tableId,
-                columnHandles.build(),
+                columnHandles,
                 columnTypes.build(),
                 externalBatchId,
                 sortColumnHandles,

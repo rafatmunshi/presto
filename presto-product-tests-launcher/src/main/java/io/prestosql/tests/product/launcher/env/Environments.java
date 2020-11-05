@@ -57,7 +57,7 @@ public final class Environments
         catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        catch (Exception e) {
+        catch (RuntimeException e) {
             log.warn("Could not prune containers correctly: %s", getStackTraceAsString(e));
         }
     }
@@ -73,7 +73,7 @@ public final class Environments
         catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        catch (Exception e) {
+        catch (RuntimeException e) {
             log.warn("Could not prune networks correctly: %s", getStackTraceAsString(e));
         }
     }
@@ -98,7 +98,7 @@ public final class Environments
             return ClassPath.from(Environments.class.getClassLoader()).getTopLevelClassesRecursive(packageName).stream()
                     .map(ClassPath.ClassInfo::load)
                     .filter(clazz -> !isAbstract(clazz.getModifiers()))
-                    .filter(clazz -> EnvironmentConfig.class.isAssignableFrom(clazz))
+                    .filter(EnvironmentConfig.class::isAssignableFrom)
                     .map(clazz -> (Class<? extends EnvironmentConfig>) clazz.asSubclass(EnvironmentConfig.class))
                     .collect(toImmutableList());
         }
@@ -109,11 +109,25 @@ public final class Environments
 
     public static String nameForClass(Class<? extends EnvironmentProvider> clazz)
     {
-        return CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_HYPHEN, clazz.getSimpleName());
+        return canonicalName(clazz);
     }
 
     public static String nameForConfigClass(Class<? extends EnvironmentConfig> clazz)
     {
-        return CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_HYPHEN, clazz.getSimpleName());
+        return canonicalName(clazz);
+    }
+
+    private static String canonicalName(Class<?> clazz)
+    {
+        return canonicalName(clazz.getSimpleName());
+    }
+
+    /**
+     * Converts camel case name to hyphenated. Returns input if the name is already hyphenated.
+     */
+    public static String canonicalName(String name)
+    {
+        return CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_HYPHEN, name)
+                .replaceAll("-+", "-");
     }
 }

@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableSet;
 import io.prestosql.Session;
 import io.prestosql.execution.warnings.WarningCollector;
 import io.prestosql.metadata.Metadata;
+import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.DynamicFilters;
 import io.prestosql.sql.planner.SubExpressionExtractor;
 import io.prestosql.sql.planner.TypeAnalyzer;
@@ -30,6 +31,7 @@ import io.prestosql.sql.planner.plan.PlanNode;
 import io.prestosql.sql.planner.plan.PlanVisitor;
 import io.prestosql.sql.planner.plan.SemiJoinNode;
 import io.prestosql.sql.planner.plan.TableScanNode;
+import io.prestosql.sql.tree.Cast;
 import io.prestosql.sql.tree.Expression;
 import io.prestosql.sql.tree.SymbolReference;
 
@@ -50,7 +52,14 @@ public class DynamicFiltersChecker
         implements PlanSanityChecker.Checker
 {
     @Override
-    public void validate(PlanNode plan, Session session, Metadata metadata, TypeAnalyzer typeAnalyzer, TypeProvider types, WarningCollector warningCollector)
+    public void validate(
+            PlanNode plan,
+            Session session,
+            Metadata metadata,
+            TypeOperators typeOperators,
+            TypeAnalyzer typeAnalyzer,
+            TypeProvider types,
+            WarningCollector warningCollector)
     {
         plan.accept(new PlanVisitor<Set<DynamicFilterId>, Void>()
         {
@@ -129,13 +138,25 @@ public class DynamicFiltersChecker
                 }
                 ImmutableSet.Builder<DynamicFilterId> consumed = ImmutableSet.builder();
                 dynamicFilters.forEach(descriptor -> {
-                    verify(descriptor.getInput() instanceof SymbolReference, "Dynamic filter expression must be a SymbolReference");
+                    validateDynamicFilterExpression(descriptor.getInput());
                     consumed.add(descriptor.getId());
                 });
                 consumed.addAll(node.getSource().accept(this, context));
                 return consumed.build();
             }
         }, null);
+    }
+
+    private static void validateDynamicFilterExpression(Expression expression)
+    {
+        if (expression instanceof SymbolReference) {
+            return;
+        }
+        verify(expression instanceof Cast,
+                "Dynamic filter expression %s must be a SymbolReference or a CAST of SymbolReference.", expression);
+        Cast castExpression = (Cast) expression;
+        verify(castExpression.getExpression() instanceof SymbolReference,
+                "The expression %s within in a CAST in dynamic filter must be a SymbolReference.", castExpression.getExpression());
     }
 
     private static List<DynamicFilters.Descriptor> extractDynamicPredicates(Expression expression)

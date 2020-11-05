@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 
+import static io.prestosql.testing.sql.TestTable.randomTableSuffix;
 import static io.prestosql.tpch.TpchTable.CUSTOMER;
 import static io.prestosql.tpch.TpchTable.NATION;
 import static io.prestosql.tpch.TpchTable.ORDERS;
@@ -195,32 +196,32 @@ public class TestPostgreSqlIntegrationSmokeTest
         // varchar equality
         assertThat(query("SELECT regionkey, nationkey, name FROM nation WHERE name = 'ROMANIA'"))
                 .matches("VALUES (BIGINT '3', BIGINT '19', CAST('ROMANIA' AS varchar(25)))")
-                .isCorrectlyPushedDown();
+                .isFullyPushedDown();
 
         // varchar range
         assertThat(query("SELECT regionkey, nationkey, name FROM nation WHERE name BETWEEN 'POLAND' AND 'RPA'"))
                 .matches("VALUES (BIGINT '3', BIGINT '19', CAST('ROMANIA' AS varchar(25)))")
-                .isCorrectlyPushedDown();
+                .isFullyPushedDown();
 
         // varchar different case
         assertThat(query("SELECT regionkey, nationkey, name FROM nation WHERE name = 'romania'"))
                 .returnsEmptyResult()
-                .isCorrectlyPushedDown();
+                .isFullyPushedDown();
 
         // bigint equality
         assertThat(query("SELECT regionkey, nationkey, name FROM nation WHERE nationkey = 19"))
                 .matches("VALUES (BIGINT '3', BIGINT '19', CAST('ROMANIA' AS varchar(25)))")
-                .isCorrectlyPushedDown();
+                .isFullyPushedDown();
 
         // bigint range, with decimal to bigint simplification
         assertThat(query("SELECT regionkey, nationkey, name FROM nation WHERE nationkey BETWEEN 18.5 AND 19.5"))
                 .matches("VALUES (BIGINT '3', BIGINT '19', CAST('ROMANIA' AS varchar(25)))")
-                .isCorrectlyPushedDown();
+                .isFullyPushedDown();
 
         // date equality
         assertThat(query("SELECT orderkey FROM orders WHERE orderdate = DATE '1992-09-29'"))
                 .matches("VALUES BIGINT '1250', 34406, 38436, 57570")
-                .isCorrectlyPushedDown();
+                .isFullyPushedDown();
     }
 
     @Test
@@ -233,25 +234,25 @@ public class TestPostgreSqlIntegrationSmokeTest
 
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE short_decimal <= 124"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE short_decimal <= 124"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE long_decimal <= 123456790"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE short_decimal <= 123.321"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE long_decimal <= 123456789.987654321"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE short_decimal = 123.321"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_decimal_pushdown WHERE long_decimal = 123456789.987654321"))
                     .matches("VALUES (CAST(123.321 AS decimal(9,3)), CAST(123456789.987654321 AS decimal(30, 10)))")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
         }
     }
 
@@ -268,13 +269,13 @@ public class TestPostgreSqlIntegrationSmokeTest
 
             assertThat(query("SELECT * FROM tpch.test_char_pushdown WHERE char_1 = '0' AND char_5 = '0'"))
                     .matches("VALUES (CHAR'0', CHAR'0    ', CHAR'0         ')")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_char_pushdown WHERE char_5 = CHAR'12345' AND char_10 = '1234567890'"))
                     .matches("VALUES (CHAR'1', CHAR'12345', CHAR'1234567890')")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
             assertThat(query("SELECT * FROM tpch.test_char_pushdown WHERE char_10 = CHAR'0'"))
                     .matches("VALUES (CHAR'0', CHAR'0    ', CHAR'0         ')")
-                    .isCorrectlyPushedDown();
+                    .isFullyPushedDown();
         }
     }
 
@@ -340,66 +341,60 @@ public class TestPostgreSqlIntegrationSmokeTest
         // TODO support aggregation over expressions
 
         // SELECT DISTINCT
-        assertThat(query("SELECT DISTINCT regionkey FROM nation")).isCorrectlyPushedDown();
+        assertThat(query("SELECT DISTINCT regionkey FROM nation")).isFullyPushedDown();
 
         // count()
-        assertThat(query("SELECT count(*) FROM nation")).isCorrectlyPushedDown();
-        assertThat(query("SELECT count(nationkey) FROM nation")).isCorrectlyPushedDown();
-        assertThat(query("SELECT count(1) FROM nation")).isCorrectlyPushedDown();
-        assertThat(query("SELECT count() FROM nation")).isCorrectlyPushedDown();
+        assertThat(query("SELECT count(*) FROM nation")).isFullyPushedDown();
+        assertThat(query("SELECT count(nationkey) FROM nation")).isFullyPushedDown();
+        assertThat(query("SELECT count(1) FROM nation")).isFullyPushedDown();
+        assertThat(query("SELECT count() FROM nation")).isFullyPushedDown();
         assertThat(query("SELECT count(DISTINCT regionkey) FROM nation")).isNotFullyPushedDown(AggregationNode.class);
 
         // GROUP BY
-        assertThat(query("SELECT regionkey, min(nationkey) FROM nation GROUP BY regionkey")).isCorrectlyPushedDown();
-        assertThat(query("SELECT regionkey, max(nationkey) FROM nation GROUP BY regionkey")).isCorrectlyPushedDown();
-        assertThat(query("SELECT regionkey, sum(nationkey) FROM nation GROUP BY regionkey")).isCorrectlyPushedDown();
-        assertThat(query("SELECT regionkey, avg(nationkey) FROM nation GROUP BY regionkey")).isCorrectlyPushedDown();
+        assertThat(query("SELECT regionkey, min(nationkey) FROM nation GROUP BY regionkey")).isFullyPushedDown();
+        assertThat(query("SELECT regionkey, max(nationkey) FROM nation GROUP BY regionkey")).isFullyPushedDown();
+        assertThat(query("SELECT regionkey, sum(nationkey) FROM nation GROUP BY regionkey")).isFullyPushedDown();
+        assertThat(query("SELECT regionkey, avg(nationkey) FROM nation GROUP BY regionkey")).isFullyPushedDown();
 
         // GROUP BY and WHERE on bigint column
         // GROUP BY and WHERE on aggregation key
-        assertThat(query("SELECT regionkey, sum(nationkey) FROM nation WHERE regionkey < 4 GROUP BY regionkey")).isCorrectlyPushedDown();
+        assertThat(query("SELECT regionkey, sum(nationkey) FROM nation WHERE regionkey < 4 GROUP BY regionkey")).isFullyPushedDown();
 
         // GROUP BY and WHERE on varchar column
         // GROUP BY and WHERE on "other" (not aggregation key, not aggregation input)
-        assertThat(query("SELECT regionkey, sum(nationkey) FROM nation WHERE regionkey < 4 AND name > 'AAA' GROUP BY regionkey")).isCorrectlyPushedDown();
+        assertThat(query("SELECT regionkey, sum(nationkey) FROM nation WHERE regionkey < 4 AND name > 'AAA' GROUP BY regionkey")).isFullyPushedDown();
 
         // decimals
         try (AutoCloseable ignoreTable = withTable("tpch.test_aggregation_pushdown", "(short_decimal decimal(9, 3), long_decimal decimal(30, 10))")) {
             execute("INSERT INTO tpch.test_aggregation_pushdown VALUES (100.000, 100000000.000000000)");
             execute("INSERT INTO tpch.test_aggregation_pushdown VALUES (123.321, 123456789.987654321)");
 
-            assertThat(query("SELECT min(short_decimal), min(long_decimal) FROM test_aggregation_pushdown")).isCorrectlyPushedDown();
-            assertThat(query("SELECT max(short_decimal), max(long_decimal) FROM test_aggregation_pushdown")).isCorrectlyPushedDown();
-            assertThat(query("SELECT sum(short_decimal), sum(long_decimal) FROM test_aggregation_pushdown")).isCorrectlyPushedDown();
-            assertThat(query("SELECT avg(short_decimal), avg(long_decimal) FROM test_aggregation_pushdown")).isCorrectlyPushedDown();
+            assertThat(query("SELECT min(short_decimal), min(long_decimal) FROM test_aggregation_pushdown")).isFullyPushedDown();
+            assertThat(query("SELECT max(short_decimal), max(long_decimal) FROM test_aggregation_pushdown")).isFullyPushedDown();
+            assertThat(query("SELECT sum(short_decimal), sum(long_decimal) FROM test_aggregation_pushdown")).isFullyPushedDown();
+            assertThat(query("SELECT avg(short_decimal), avg(long_decimal) FROM test_aggregation_pushdown")).isFullyPushedDown();
         }
     }
 
     @Test
     public void testLimitPushdown()
     {
-        assertThat(query("SELECT name FROM nation LIMIT 30")).isCorrectlyPushedDown(); // Use high limit for result determinism
+        assertThat(query("SELECT name FROM nation LIMIT 30")).isFullyPushedDown(); // Use high limit for result determinism
 
         // with filter over numeric column
-        assertThat(query("SELECT name FROM nation WHERE regionkey = 3 LIMIT 5")).isCorrectlyPushedDown();
+        assertThat(query("SELECT name FROM nation WHERE regionkey = 3 LIMIT 5")).isFullyPushedDown();
 
         // with filter over varchar column
-        assertThat(query("SELECT name FROM nation WHERE name < 'EEE' LIMIT 5")).isCorrectlyPushedDown();
-    }
+        assertThat(query("SELECT name FROM nation WHERE name < 'EEE' LIMIT 5")).isFullyPushedDown();
 
-    @Test
-    public void testColumnComment()
-            throws Exception
-    {
-        try (AutoCloseable ignore = withTable("tpch.test_column_comment",
-                "(col1 bigint, col2 bigint, col3 bigint)")) {
-            execute("COMMENT ON COLUMN tpch.test_column_comment.col1 IS 'test comment'");
-            execute("COMMENT ON COLUMN tpch.test_column_comment.col2 IS ''"); // it will be NULL, PostgreSQL doesn't store empty comment
+        // with aggregation
+        assertThat(query("SELECT max(regionkey) FROM nation LIMIT 5")).isFullyPushedDown(); // global aggregation, LIMIT removed
+        assertThat(query("SELECT regionkey, max(name) FROM nation GROUP BY regionkey LIMIT 5")).isFullyPushedDown();
+        assertThat(query("SELECT DISTINCT regionkey FROM nation LIMIT 5")).isFullyPushedDown();
 
-            assertQuery(
-                    "SELECT column_name, comment FROM information_schema.columns WHERE table_schema = 'tpch' AND table_name = 'test_column_comment'",
-                    "VALUES ('col1', 'test comment'), ('col2', null), ('col3', null)");
-        }
+        // with filter and aggregation
+        assertThat(query("SELECT regionkey, count(*) FROM nation WHERE nationkey < 5 GROUP BY regionkey LIMIT 3")).isFullyPushedDown();
+        assertThat(query("SELECT regionkey, count(*) FROM nation WHERE name < 'EGYPT' GROUP BY regionkey LIMIT 3")).isFullyPushedDown();
     }
 
     /**
@@ -423,6 +418,29 @@ public class TestPostgreSqlIntegrationSmokeTest
                 .mapToObj(value -> getLongInClause(value * 10_000, 10_000))
                 .collect(joining(" OR "));
         execute("SELECT count(*) FROM tpch.orders WHERE " + longInClauses);
+    }
+
+    /**
+     * Regression test for https://github.com/prestosql/presto/issues/5543
+     */
+    @Test
+    public void testTimestampColumnAndTimestampWithTimeZoneConstant()
+            throws Exception
+    {
+        String tableName = "tpch.test_timestamptz_unwrap_cast" + randomTableSuffix();
+        try (AutoCloseable ignored = withTable(tableName, "(id integer, ts_col timestamp(6))")) {
+            execute("INSERT INTO " + tableName + " (id, ts_col) VALUES " +
+                    "(1, timestamp '2020-01-01 01:01:01.000')," +
+                    "(2, timestamp '2019-01-01 01:01:01.000')");
+
+            assertThat(query(format("SELECT id FROM %s WHERE ts_col >= TIMESTAMP '2019-01-01 00:00:00 %s'", tableName, getSession().getTimeZoneKey().getId())))
+                    .matches("VALUES 1, 2")
+                    .isFullyPushedDown();
+
+            assertThat(query(format("SELECT id FROM %s WHERE ts_col >= TIMESTAMP '2019-01-01 00:00:00 %s'", tableName, "UTC")))
+                    .matches("VALUES 1")
+                    .isFullyPushedDown();
+        }
     }
 
     private String getLongInClause(int start, int length)

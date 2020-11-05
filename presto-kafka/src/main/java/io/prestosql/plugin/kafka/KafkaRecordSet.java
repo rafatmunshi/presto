@@ -22,22 +22,17 @@ import io.prestosql.decoder.FieldValueProvider;
 import io.prestosql.decoder.RowDecoder;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.BlockBuilder;
-import io.prestosql.spi.block.MapBlockBuilder;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.connector.RecordCursor;
 import io.prestosql.spi.connector.RecordSet;
-import io.prestosql.spi.type.ArrayType;
 import io.prestosql.spi.type.MapType;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.VarbinaryType;
-import io.prestosql.spi.type.VarcharType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
 
-import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -55,11 +50,12 @@ import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.KEY_LENGTH_FIE
 import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.MESSAGE_CORRUPT_FIELD;
 import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.MESSAGE_FIELD;
 import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.MESSAGE_LENGTH_FIELD;
+import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.OFFSET_TIMESTAMP_FIELD;
 import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.PARTITION_ID_FIELD;
 import static io.prestosql.plugin.kafka.KafkaInternalFieldManager.PARTITION_OFFSET_FIELD;
+import static io.prestosql.spi.type.Timestamps.MICROSECONDS_PER_MILLISECOND;
 import static io.prestosql.spi.type.TypeUtils.writeNativeValue;
 import static java.lang.Math.max;
-import static java.lang.invoke.MethodType.methodType;
 import static java.util.Collections.emptyIterator;
 import static java.util.Objects.requireNonNull;
 
@@ -68,7 +64,6 @@ public class KafkaRecordSet
 {
     private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
     private static final int CONSUMER_POLL_TIMEOUT = 100;
-    private static final FieldValueProvider EMPTY_HEADERS_FIELD_PROVIDER = createEmptyHeadersFieldProvider();
 
     private final KafkaSplit split;
 
@@ -185,6 +180,7 @@ public class KafkaRecordSet
             if (message.value() != null) {
                 messageData = message.value();
             }
+            long timeStamp = message.timestamp();
 
             Map<ColumnHandle, FieldValueProvider> currentRowValuesMap = new HashMap<>();
 
@@ -208,6 +204,10 @@ public class KafkaRecordSet
                             break;
                         case KEY_LENGTH_FIELD:
                             currentRowValuesMap.put(columnHandle, longValueProvider(keyData.length));
+                            break;
+                        case OFFSET_TIMESTAMP_FIELD:
+                            timeStamp *= MICROSECONDS_PER_MILLISECOND;
+                            currentRowValuesMap.put(columnHandle, longValueProvider(timeStamp));
                             break;
                         case KEY_CORRUPT_FIELD:
                             currentRowValuesMap.put(columnHandle, booleanValueProvider(decodedKey.isEmpty()));
@@ -295,38 +295,8 @@ public class KafkaRecordSet
         }
     }
 
-    private static FieldValueProvider createEmptyHeadersFieldProvider()
-    {
-        MapType mapType = new MapType(VarcharType.VARCHAR, new ArrayType(VarbinaryType.VARBINARY),
-                MethodHandles.empty(methodType(Boolean.class, Block.class, int.class, long.class)),
-                MethodHandles.empty(methodType(Boolean.class, Block.class, int.class, Block.class, int.class)),
-                MethodHandles.empty(methodType(long.class, Object.class)),
-                MethodHandles.empty(methodType(long.class, Object.class)));
-        BlockBuilder mapBlockBuilder = new MapBlockBuilder(mapType, null, 0);
-        mapBlockBuilder.beginBlockEntry();
-        mapBlockBuilder.closeEntry();
-        Block emptyMapBlock = mapType.getObject(mapBlockBuilder, 0);
-        return new FieldValueProvider() {
-            @Override
-            public boolean isNull()
-            {
-                return false;
-            }
-
-            @Override
-            public Block getBlock()
-            {
-                return emptyMapBlock;
-            }
-        };
-    }
-
     public static FieldValueProvider headerMapValueProvider(MapType varcharMapType, Headers headers)
     {
-        if (!headers.iterator().hasNext()) {
-            return EMPTY_HEADERS_FIELD_PROVIDER;
-        }
-
         Type keyType = varcharMapType.getTypeParameters().get(0);
         Type valueArrayType = varcharMapType.getTypeParameters().get(1);
         Type valueType = valueArrayType.getTypeParameters().get(0);
