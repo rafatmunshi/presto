@@ -22,7 +22,6 @@ import io.prestosql.transaction.TransactionId;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.google.common.base.MoreObjects.toStringHelper;
 import static java.util.Objects.requireNonNull;
 
 public class SecurityContext
@@ -85,15 +84,5 @@ public class SecurityContext
     {
         // this is needed by io.prestosql.sql.analyzer.Analysis.AccessControlInfo
         return Objects.hash(transactionId, identity, queryId);
-    }
-
-    @Override
-    public String toString()
-    {
-        return toStringHelper(this)
-                .add("identity", identity)
-                // no transactionId here as it is not that useful
-                .add("queryId", queryId)
-                .toString();
     }
 }

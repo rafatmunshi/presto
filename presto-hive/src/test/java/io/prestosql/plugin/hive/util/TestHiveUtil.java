@@ -80,7 +80,9 @@ public class TestHiveUtil
     {
         List<String> actual = toPartitionValues(partitionName);
         AbstractList<String> expected = new ArrayList<>();
-        actual.forEach(s -> expected.add(null));
+        for (String s : actual) {
+            expected.add(null);
+        }
         Warehouse.makeValsFromName(partitionName, expected);
         assertEquals(actual, expected);
     }

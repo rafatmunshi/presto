@@ -86,8 +86,7 @@ public final class ArrayConcatFunction
                 METHOD_HANDLE.bindTo(elementType),
                 USER_STATE_FACTORY.bindTo(elementType));
 
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 nCopies(functionBinding.getArity(), NEVER_NULL),
                 methodHandleAndConstructor.getMethodHandle(),

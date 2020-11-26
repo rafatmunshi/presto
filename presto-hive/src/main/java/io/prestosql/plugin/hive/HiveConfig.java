@@ -115,6 +115,9 @@ public class HiveConfig
     private boolean ignoreCorruptedStatistics;
     private boolean collectColumnStatisticsOnWrite = true;
 
+    private String recordingPath;
+    private boolean replay;
+    private Duration recordingDuration = new Duration(10, MINUTES);
     private boolean s3SelectPushdownEnabled;
     private int s3SelectPushdownMaxConnections = 500;
 
@@ -534,7 +537,7 @@ public class HiveConfig
 
     public DateTimeZone getRcfileDateTimeZone()
     {
-        return DateTimeZone.forID(rcfileTimeZone);
+        return DateTimeZone.forTimeZone(TimeZone.getTimeZone(rcfileTimeZone));
     }
 
     @NotNull
@@ -582,7 +585,7 @@ public class HiveConfig
 
     public DateTimeZone getOrcLegacyDateTimeZone()
     {
-        return DateTimeZone.forID(orcLegacyTimeZone);
+        return DateTimeZone.forTimeZone(TimeZone.getTimeZone(orcLegacyTimeZone));
     }
 
     @NotNull
@@ -601,7 +604,7 @@ public class HiveConfig
 
     public DateTimeZone getParquetDateTimeZone()
     {
-        return DateTimeZone.forID(parquetTimeZone);
+        return DateTimeZone.forTimeZone(TimeZone.getTimeZone(parquetTimeZone));
     }
 
     @NotNull
@@ -822,6 +825,43 @@ public class HiveConfig
     {
         this.collectColumnStatisticsOnWrite = collectColumnStatisticsOnWrite;
         return this;
+    }
+
+    @Config("hive.metastore-recording-path")
+    public HiveConfig setRecordingPath(String recordingPath)
+    {
+        this.recordingPath = recordingPath;
+        return this;
+    }
+
+    public String getRecordingPath()
+    {
+        return recordingPath;
+    }
+
+    @Config("hive.replay-metastore-recording")
+    public HiveConfig setReplay(boolean replay)
+    {
+        this.replay = replay;
+        return this;
+    }
+
+    public boolean isReplay()
+    {
+        return replay;
+    }
+
+    @Config("hive.metastore-recording-duration")
+    public HiveConfig setRecordingDuration(Duration recordingDuration)
+    {
+        this.recordingDuration = recordingDuration;
+        return this;
+    }
+
+    @NotNull
+    public Duration getRecordingDuration()
+    {
+        return recordingDuration;
     }
 
     public boolean isS3SelectPushdownEnabled()

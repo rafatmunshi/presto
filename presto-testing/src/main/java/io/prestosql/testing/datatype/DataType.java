@@ -39,7 +39,7 @@ import static io.prestosql.spi.type.CharType.createCharType;
 import static io.prestosql.spi.type.Chars.padSpaces;
 import static io.prestosql.spi.type.DateType.DATE;
 import static io.prestosql.spi.type.DecimalType.createDecimalType;
-import static io.prestosql.spi.type.TimeType.createTimeType;
+import static io.prestosql.spi.type.TimeType.TIME;
 import static io.prestosql.spi.type.TimestampType.TIMESTAMP_MILLIS;
 import static io.prestosql.spi.type.TimestampType.createTimestampType;
 import static io.prestosql.spi.type.VarcharType.createUnboundedVarcharType;
@@ -178,13 +178,12 @@ public class DataType<T>
                 identity());
     }
 
-    public static DataType<LocalTime> timeDataType(int precision)
+    public static DataType<LocalTime> timeDataType()
     {
-        String pattern = "'TIME '''HH:mm:ss" + (precision == 0 ? "" : ("." + "S".repeat(precision))) + "''";
         return dataType(
-                format("time(%s)", precision),
-                createTimeType(precision),
-                DateTimeFormatter.ofPattern(pattern)::format,
+                "time",
+                TIME,
+                DateTimeFormatter.ofPattern("'TIME '''HH:mm:ss.SSS''")::format,
                 identity());
     }
 

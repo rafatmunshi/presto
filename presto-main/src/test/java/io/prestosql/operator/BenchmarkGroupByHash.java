@@ -22,11 +22,10 @@ import io.prestosql.array.LongBigArray;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.PageBuilder;
 import io.prestosql.spi.block.Block;
-import io.prestosql.spi.type.AbstractLongType;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.gen.JoinCompiler;
-import io.prestosql.type.BlockTypeOperators;
+import io.prestosql.type.BigintOperators;
+import io.prestosql.type.VarcharOperators;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -54,6 +53,7 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
+import static io.prestosql.metadata.MetadataManager.createTestMetadataManager;
 import static io.prestosql.operator.UpdateMemory.NOOP;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.VarcharType.VARCHAR;
@@ -72,14 +72,12 @@ public class BenchmarkGroupByHash
     private static final String GROUP_COUNT_STRING = "3000000";
     private static final int GROUP_COUNT = Integer.parseInt(GROUP_COUNT_STRING);
     private static final int EXPECTED_SIZE = 10_000;
-    private static final TypeOperators TYPE_OPERATORS = new TypeOperators();
-    private static final BlockTypeOperators TYPE_OPERATOR_FACTORY = new BlockTypeOperators(TYPE_OPERATORS);
 
     @Benchmark
     @OperationsPerInvocation(POSITIONS)
     public Object groupByHashPreCompute(BenchmarkData data)
     {
-        GroupByHash groupByHash = new MultiChannelGroupByHash(data.getTypes(), data.getChannels(), data.getHashChannel(), EXPECTED_SIZE, false, getJoinCompiler(), TYPE_OPERATOR_FACTORY, NOOP);
+        GroupByHash groupByHash = new MultiChannelGroupByHash(data.getTypes(), data.getChannels(), data.getHashChannel(), EXPECTED_SIZE, false, getJoinCompiler(), NOOP);
         data.getPages().forEach(p -> groupByHash.getGroupIds(p).process());
 
         ImmutableList.Builder<Page> pages = ImmutableList.builder();
@@ -100,7 +98,7 @@ public class BenchmarkGroupByHash
     @OperationsPerInvocation(POSITIONS)
     public Object addPagePreCompute(BenchmarkData data)
     {
-        GroupByHash groupByHash = new MultiChannelGroupByHash(data.getTypes(), data.getChannels(), data.getHashChannel(), EXPECTED_SIZE, false, getJoinCompiler(), TYPE_OPERATOR_FACTORY, NOOP);
+        GroupByHash groupByHash = new MultiChannelGroupByHash(data.getTypes(), data.getChannels(), data.getHashChannel(), EXPECTED_SIZE, false, getJoinCompiler(), NOOP);
         data.getPages().forEach(p -> groupByHash.addPage(p).process());
 
         ImmutableList.Builder<Page> pages = ImmutableList.builder();
@@ -212,7 +210,7 @@ public class BenchmarkGroupByHash
                 BIGINT.writeLong(pageBuilder.getBlockBuilder(numChannel), rand);
             }
             if (hashEnabled) {
-                BIGINT.writeLong(pageBuilder.getBlockBuilder(channelCount), AbstractLongType.hash((long) rand));
+                BIGINT.writeLong(pageBuilder.getBlockBuilder(channelCount), BigintOperators.hashCode(rand));
             }
             if (pageBuilder.isFull()) {
                 pages.add(pageBuilder.build());
@@ -240,7 +238,7 @@ public class BenchmarkGroupByHash
                 VARCHAR.writeSlice(pageBuilder.getBlockBuilder(channel), value);
             }
             if (hashEnabled) {
-                BIGINT.writeLong(pageBuilder.getBlockBuilder(channelCount), XxHash64.hash(value));
+                BIGINT.writeLong(pageBuilder.getBlockBuilder(channelCount), VarcharOperators.hashCode(value));
             }
             if (pageBuilder.isFull()) {
                 pages.add(pageBuilder.build());
@@ -287,6 +285,9 @@ public class BenchmarkGroupByHash
 
         @Param({"true", "false"})
         private boolean hashEnabled = true;
+
+        @Param(GROUP_COUNT_STRING)
+        private int groupCount = GROUP_COUNT;
 
         private List<Page> pages;
         private List<Type> types;
@@ -386,7 +387,7 @@ public class BenchmarkGroupByHash
 
     private static JoinCompiler getJoinCompiler()
     {
-        return new JoinCompiler(TYPE_OPERATORS);
+        return new JoinCompiler(createTestMetadataManager());
     }
 
     public static void main(String[] args)

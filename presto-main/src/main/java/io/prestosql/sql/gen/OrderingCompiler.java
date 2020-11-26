@@ -37,17 +37,13 @@ import io.prestosql.operator.SimplePagesIndexComparator;
 import io.prestosql.operator.SyntheticAddress;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.block.Block;
-import io.prestosql.spi.connector.SortOrder;
+import io.prestosql.spi.block.SortOrder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.weakref.jmx.Managed;
 import org.weakref.jmx.Nested;
 
-import javax.inject.Inject;
-
-import java.lang.invoke.MethodHandle;
 import java.util.List;
 import java.util.Objects;
 
@@ -57,12 +53,9 @@ import static io.airlift.bytecode.Access.a;
 import static io.airlift.bytecode.Parameter.arg;
 import static io.airlift.bytecode.ParameterizedType.type;
 import static io.airlift.bytecode.expression.BytecodeExpressions.constantInt;
-import static io.airlift.bytecode.expression.BytecodeExpressions.invokeDynamic;
+import static io.airlift.bytecode.expression.BytecodeExpressions.getStatic;
 import static io.airlift.bytecode.expression.BytecodeExpressions.invokeStatic;
-import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.BLOCK_POSITION;
-import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
-import static io.prestosql.spi.function.InvocationConvention.simpleConvention;
-import static io.prestosql.sql.gen.Bootstrap.BOOTSTRAP_METHOD;
+import static io.prestosql.sql.gen.SqlTypeBytecodeExpression.constantType;
 import static io.prestosql.util.CompilerUtils.defineClass;
 import static io.prestosql.util.CompilerUtils.makeClassName;
 import static java.util.Objects.requireNonNull;
@@ -80,14 +73,6 @@ public class OrderingCompiler
             .recordStats()
             .maximumSize(1000)
             .build(CacheLoader.from(key -> internalCompilePageWithPositionComparator(key.getSortTypes(), key.getSortChannels(), key.getSortOrders())));
-
-    private final TypeOperators typeOperators;
-
-    @Inject
-    public OrderingCompiler(TypeOperators typeOperators)
-    {
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
-    }
 
     @Managed
     @Nested
@@ -125,7 +110,7 @@ public class OrderingCompiler
         }
         catch (Throwable e) {
             log.error(e, "Error compiling comparator for channels %s with order %s", sortChannels, sortOrders);
-            comparator = new SimplePagesIndexComparator(sortTypes, sortChannels, sortOrders, typeOperators);
+            comparator = new SimplePagesIndexComparator(sortTypes, sortChannels, sortOrders);
         }
 
         // we may want to load a separate PagesIndexOrdering for each comparator
@@ -151,7 +136,7 @@ public class OrderingCompiler
         return defineClass(classDefinition, PagesIndexComparator.class, callSiteBinder.getBindings(), getClass().getClassLoader());
     }
 
-    private void generatePageIndexCompareTo(ClassDefinition classDefinition, CallSiteBinder callSiteBinder, List<Type> sortTypes, List<Integer> sortChannels, List<SortOrder> sortOrders)
+    private static void generatePageIndexCompareTo(ClassDefinition classDefinition, CallSiteBinder callSiteBinder, List<Type> sortTypes, List<Integer> sortChannels, List<SortOrder> sortOrders)
     {
         Parameter pagesIndex = arg("pagesIndex", PagesIndex.class);
         Parameter leftPosition = arg("leftPosition", int.class);
@@ -204,11 +189,11 @@ public class OrderingCompiler
         for (int i = 0; i < sortChannels.size(); i++) {
             int sortChannel = sortChannels.get(i);
             SortOrder sortOrder = sortOrders.get(i);
-            Type sortType = sortTypes.get(i);
-            MethodHandle compareBlockValue = getBlockPositionOrderingOperator(sortOrder, sortType);
 
             BytecodeBlock block = new BytecodeBlock()
                     .setDescription("compare channel " + sortChannel + " " + sortOrder);
+
+            Type sortType = sortTypes.get(i);
 
             BytecodeExpression leftBlock = pagesIndex
                     .invoke("getChannel", ObjectArrayList.class, constantInt(sortChannel))
@@ -220,15 +205,15 @@ public class OrderingCompiler
                     .invoke("get", Object.class, rightBlockIndex)
                     .cast(Block.class);
 
-            block.append(invokeDynamic(
-                    BOOTSTRAP_METHOD,
-                    ImmutableList.of(callSiteBinder.bind(compareBlockValue).getBindingId()),
-                    "compareBlockValue",
-                    compareBlockValue.type(),
-                    leftBlock,
-                    leftBlockPosition,
-                    rightBlock,
-                    rightBlockPosition));
+            block.append(getStatic(SortOrder.class, sortOrder.name())
+                    .invoke("compareBlockValue",
+                            int.class,
+                            ImmutableList.of(Type.class, Block.class, int.class, Block.class, int.class),
+                            constantType(callSiteBinder, sortType),
+                            leftBlock,
+                            leftBlockPosition,
+                            rightBlock,
+                            rightBlockPosition));
 
             LabelNode equal = new LabelNode("equal");
             block.comment("if (compare != 0) return compare")
@@ -245,11 +230,6 @@ public class OrderingCompiler
         compareToMethod.getBody()
                 .push(0)
                 .retInt();
-    }
-
-    private MethodHandle getBlockPositionOrderingOperator(SortOrder sortOrder, Type sortType)
-    {
-        return typeOperators.getOrderingOperator(sortType, sortOrder, simpleConvention(FAIL_ON_NULL, BLOCK_POSITION, BLOCK_POSITION));
     }
 
     public PageWithPositionComparator compilePageWithPositionComparator(List<Type> sortTypes, List<Integer> sortChannels, List<SortOrder> sortOrders)
@@ -270,7 +250,7 @@ public class OrderingCompiler
         }
         catch (Throwable t) {
             log.error(t, "Error compiling comparator for channels %s with order %s", sortChannels, sortChannels);
-            comparator = new SimplePageWithPositionComparator(types, sortChannels, sortOrders, typeOperators);
+            comparator = new SimplePageWithPositionComparator(types, sortChannels, sortOrders);
         }
         return comparator;
     }
@@ -303,11 +283,11 @@ public class OrderingCompiler
         for (int i = 0; i < sortChannels.size(); i++) {
             int sortChannel = sortChannels.get(i);
             SortOrder sortOrder = sortOrders.get(i);
-            Type sortType = types.get(sortChannel);
-            MethodHandle compareBlockValue = getBlockPositionOrderingOperator(sortOrder, sortType);
 
             BytecodeBlock block = new BytecodeBlock()
                     .setDescription("compare channel " + sortChannel + " " + sortOrder);
+
+            Type sortType = types.get(sortChannel);
 
             BytecodeExpression leftBlock = leftPage
                     .invoke("getBlock", Block.class, constantInt(sortChannel));
@@ -315,15 +295,15 @@ public class OrderingCompiler
             BytecodeExpression rightBlock = rightPage
                     .invoke("getBlock", Block.class, constantInt(sortChannel));
 
-            block.append(invokeDynamic(
-                    BOOTSTRAP_METHOD,
-                    ImmutableList.of(callSiteBinder.bind(compareBlockValue).getBindingId()),
-                    "compareBlockValue",
-                    compareBlockValue.type(),
-                    leftBlock,
-                    leftPosition,
-                    rightBlock,
-                    rightPosition));
+            block.append(getStatic(SortOrder.class, sortOrder.name())
+                    .invoke("compareBlockValue",
+                            int.class,
+                            ImmutableList.of(Type.class, Block.class, int.class, Block.class, int.class),
+                            constantType(callSiteBinder, sortType),
+                            leftBlock,
+                            leftPosition,
+                            rightBlock,
+                            rightPosition));
 
             LabelNode equal = new LabelNode("equal");
             block.comment("if (compare != 0) return compare")

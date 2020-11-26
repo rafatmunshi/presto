@@ -17,6 +17,7 @@ import org.testng.annotations.Test;
 
 import java.net.URI;
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.Properties;
 
 import static io.prestosql.jdbc.ConnectionProperties.CLIENT_TAGS;
@@ -25,14 +26,11 @@ import static io.prestosql.jdbc.ConnectionProperties.HTTP_PROXY;
 import static io.prestosql.jdbc.ConnectionProperties.SOCKS_PROXY;
 import static io.prestosql.jdbc.ConnectionProperties.SSL_TRUST_STORE_PASSWORD;
 import static io.prestosql.jdbc.ConnectionProperties.SSL_TRUST_STORE_PATH;
-import static io.prestosql.jdbc.ConnectionProperties.SSL_VERIFICATION;
-import static io.prestosql.jdbc.ConnectionProperties.SslVerificationMode.CA;
-import static io.prestosql.jdbc.ConnectionProperties.SslVerificationMode.FULL;
-import static io.prestosql.jdbc.ConnectionProperties.SslVerificationMode.NONE;
 import static java.lang.String.format;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
 public class TestPrestoDriverUri
@@ -61,9 +59,6 @@ public class TestPrestoDriverUri
         // empty property
         assertInvalid("jdbc:presto://localhost:8080/hive/default?SSL=", "Connection property 'SSL' value is empty");
 
-        // empty ssl verification property
-        assertInvalid("jdbc:presto://localhost:8080/hive/default?SSL=true&SSLVerification=", "Connection property 'SSLVerification' value is empty");
-
         // property in url multiple times
         assertInvalid("presto://localhost:8080/blackhole?password=a&password=b", "Connection property 'password' is in URL multiple times");
 
@@ -80,16 +75,6 @@ public class TestPrestoDriverUri
         assertInvalid("jdbc:presto://localhost:8080?SSL=2", "Connection property 'SSL' value is invalid: 2");
         assertInvalid("jdbc:presto://localhost:8080?SSL=abc", "Connection property 'SSL' value is invalid: abc");
 
-        //invalid ssl verification mode
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=0", "Connection property 'SSLVerification' value is invalid: 0");
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=abc", "Connection property 'SSLVerification' value is invalid: abc");
-
-        // ssl verification without ssl
-        assertInvalid("jdbc:presto://localhost:8080?SSLVerification=FULL", "Connection property 'SSLVerification' is not allowed");
-
-        // ssl verification using port 443 without ssl
-        assertInvalid("jdbc:presto://localhost:443?SSLVerification=FULL", "Connection property 'SSLVerification' is not allowed");
-
         // ssl key store password without path
         assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLKeyStorePassword=password", "Connection property 'SSLKeyStorePassword' is not allowed");
 
@@ -105,38 +90,14 @@ public class TestPrestoDriverUri
         // key store path without ssl
         assertInvalid("jdbc:presto://localhost:8080?SSLKeyStorePath=keystore.jks", "Connection property 'SSLKeyStorePath' is not allowed");
 
-        // key store path using port 443 without ssl
-        assertInvalid("jdbc:presto://localhost:443?SSLKeyStorePath=keystore.jks", "Connection property 'SSLKeyStorePath' is not allowed");
-
         // trust store path without ssl
         assertInvalid("jdbc:presto://localhost:8080?SSLTrustStorePath=truststore.jks", "Connection property 'SSLTrustStorePath' is not allowed");
-
-        // trust store path using port 443 without ssl
-        assertInvalid("jdbc:presto://localhost:443?SSLTrustStorePath=truststore.jks", "Connection property 'SSLTrustStorePath' is not allowed");
 
         // key store password without ssl
         assertInvalid("jdbc:presto://localhost:8080?SSLKeyStorePassword=password", "Connection property 'SSLKeyStorePassword' is not allowed");
 
         // trust store password without ssl
         assertInvalid("jdbc:presto://localhost:8080?SSLTrustStorePassword=password", "Connection property 'SSLTrustStorePassword' is not allowed");
-
-        // key store path with ssl verification mode NONE
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=NONE&SSLKeyStorePath=keystore.jks", "Connection property 'SSLKeyStorePath' is not allowed");
-
-        // ssl key store password with ssl verification mode NONE
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=NONE&SSLKeyStorePassword=password", "Connection property 'SSLKeyStorePassword' is not allowed");
-
-        // ssl key store type with ssl verification mode NONE
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=NONE&SSLKeyStoreType=type", "Connection property 'SSLKeyStoreType' is not allowed");
-
-        // trust store path with ssl verification mode NONE
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=NONE&SSLTrustStorePath=truststore.jks", "Connection property 'SSLTrustStorePath' is not allowed");
-
-        // ssl trust store password with ssl verification mode NONE
-        assertInvalid("jdbc:presto://localhost:8080?SSL=true&SSLVerification=NONE&SSLTrustStorePassword=password", "Connection property 'SSLTrustStorePassword' is not allowed");
-
-        // key store path with ssl verification mode NONE
-        assertInvalid("jdbc:presto://localhost:8080?SSLKeyStorePath=keystore.jks", "Connection property 'SSLKeyStorePath' is not allowed");
 
         // kerberos config without service name
         assertInvalid("jdbc:presto://localhost:8080?KerberosCredentialCachePath=/test", "Connection property 'KerberosCredentialCachePath' is not allowed");
@@ -274,39 +235,6 @@ public class TestPrestoDriverUri
     }
 
     @Test
-    public void testUriWithSslEnabledUsing443SslVerificationFull()
-            throws SQLException
-    {
-        PrestoDriverUri parameters = createDriverUri("presto://localhost:443/blackhole?SSL=true&SSLVerification=FULL");
-        assertUriPortScheme(parameters, 443, "https");
-
-        Properties properties = parameters.getProperties();
-        assertEquals(properties.getProperty(SSL_VERIFICATION.getKey()), FULL.name());
-    }
-
-    @Test
-    public void testUriWithSslEnabledUsing443SslVerificationCA()
-            throws SQLException
-    {
-        PrestoDriverUri parameters = createDriverUri("presto://localhost:443/blackhole?SSL=true&SSLVerification=CA");
-        assertUriPortScheme(parameters, 443, "https");
-
-        Properties properties = parameters.getProperties();
-        assertEquals(properties.getProperty(SSL_VERIFICATION.getKey()), CA.name());
-    }
-
-    @Test
-    public void testUriWithSslEnabledUsing443SslVerificationNONE()
-            throws SQLException
-    {
-        PrestoDriverUri parameters = createDriverUri("presto://localhost:443/blackhole?SSL=true&SSLVerification=NONE");
-        assertUriPortScheme(parameters, 443, "https");
-
-        Properties properties = parameters.getProperties();
-        assertEquals(properties.getProperty(SSL_VERIFICATION.getKey()), NONE.name());
-    }
-
-    @Test
     public void testUriWithExtraCredentials()
             throws SQLException
     {
@@ -324,6 +252,14 @@ public class TestPrestoDriverUri
         PrestoDriverUri parameters = createDriverUri("presto://localhost:8080?clientTags=" + clientTags);
         Properties properties = parameters.getProperties();
         assertEquals(properties.getProperty(CLIENT_TAGS.getKey()), clientTags);
+    }
+
+    @Test
+    public void testUriWithUseSessionTimeZone()
+            throws SQLException
+    {
+        Optional<Boolean> property = createDriverUri("presto://localhost:8080?useSessionTimeZone=true").useSessionTimezone();
+        assertTrue(property.isPresent() && property.get());
     }
 
     private static void assertUriPortScheme(PrestoDriverUri parameters, int port, String scheme)

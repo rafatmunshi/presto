@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.TimeZone;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Strings.emptyToNull;
@@ -171,7 +172,7 @@ public class OrcMetadataReader
                 toStream(stripeFooter.getStreamsList()),
                 toColumnEncoding(stripeFooter.getColumnsList()),
                 Optional.ofNullable(emptyToNull(stripeFooter.getWriterTimezone()))
-                        .map(ZoneId::of)
+                        .map(zone -> TimeZone.getTimeZone(zone).toZoneId())
                         .orElse(legacyFileTimeZone));
     }
 

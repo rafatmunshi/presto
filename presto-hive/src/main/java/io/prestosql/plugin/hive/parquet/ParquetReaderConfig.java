@@ -26,28 +26,19 @@ public class ParquetReaderConfig
     private ParquetReaderOptions options = new ParquetReaderOptions();
 
     @Deprecated
-    public boolean isIgnoreStatistics()
+    public boolean isFailOnCorruptedStatistics()
     {
-        return options.isIgnoreStatistics();
+        return options.isFailOnCorruptedStatistics();
     }
 
     @Deprecated
-    @Config("parquet.ignore-statistics")
-    @ConfigDescription("Ignore statistics from Parquet to allow querying files with corrupted or incorrect statistics")
-    public ParquetReaderConfig setIgnoreStatistics(boolean ignoreStatistics)
-    {
-        options = options.withIgnoreStatistics(ignoreStatistics);
-        return this;
-    }
-
-    /**
-     * @deprecated Use {@link #setIgnoreStatistics} instead.
-     */
-    @Deprecated
-    @LegacyConfig(value = {"hive.parquet.fail-on-corrupted-statistics", "parquet.fail-on-corrupted-statistics"}, replacedBy = "parquet.ignore-statistics")
+    @Config("parquet.fail-on-corrupted-statistics")
+    @LegacyConfig("hive.parquet.fail-on-corrupted-statistics")
+    @ConfigDescription("Fail when scanning Parquet files with corrupted statistics")
     public ParquetReaderConfig setFailOnCorruptedStatistics(boolean failOnCorruptedStatistics)
     {
-        return setIgnoreStatistics(!failOnCorruptedStatistics);
+        options = options.withFailOnCorruptedStatistics(failOnCorruptedStatistics);
+        return this;
     }
 
     @NotNull

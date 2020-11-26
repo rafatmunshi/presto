@@ -21,10 +21,8 @@ import io.prestosql.plugin.hive.HiveTestUtils;
 import io.prestosql.plugin.hive.PartitionStatistics;
 import io.prestosql.plugin.hive.authentication.HiveIdentity;
 import io.prestosql.plugin.hive.metastore.HiveMetastore;
-import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.PartitionWithStatistics;
 import io.prestosql.plugin.hive.metastore.Table;
-import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.connector.ColumnMetadata;
 import io.prestosql.spi.connector.SchemaTableName;
 import io.prestosql.spi.connector.TableNotFoundException;
@@ -57,8 +55,8 @@ import static io.prestosql.testing.TestingConnectorSession.SESSION;
 import static java.util.Locale.ENGLISH;
 import static java.util.UUID.randomUUID;
 import static org.apache.hadoop.hive.common.FileUtils.makePartName;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 /*
@@ -134,15 +132,7 @@ public class TestHiveGlueMetastore
         glueConfig.setAssumeCanonicalPartitionKeys(true);
 
         Executor executor = new BoundedExecutor(this.executor, 10);
-        return new GlueHiveMetastore(
-                HDFS_ENVIRONMENT,
-                glueConfig,
-                new DisabledGlueColumnStatisticsProvider(),
-                executor,
-                Optional.empty(),
-                new DefaultGlueMetastoreTableFilterProvider(
-                        new MetastoreConfig()
-                                .setHideDeltaLakeTables(true)).get());
+        return new GlueHiveMetastore(HDFS_ENVIRONMENT, glueConfig, new DisabledGlueColumnStatisticsProvider(), executor, Optional.empty());
     }
 
     @Override
@@ -228,9 +218,7 @@ public class TestHiveGlueMetastore
         GlueHiveMetastore metastore = (GlueHiveMetastore) getMetastoreClient();
         GlueMetastoreStats stats = metastore.getStats();
         long initialFailureCount = stats.getGetDatabase().getTotalFailures().getTotalCount();
-        assertThatThrownBy(() -> getMetastoreClient().getDatabase(null))
-                .isInstanceOf(PrestoException.class)
-                .hasMessageStartingWith("Database name cannot be equal to null or empty");
+        assertThrows(() -> getMetastoreClient().getDatabase(null));
         assertEquals(stats.getGetDatabase().getTotalFailures().getTotalCount(), initialFailureCount + 1);
     }
 

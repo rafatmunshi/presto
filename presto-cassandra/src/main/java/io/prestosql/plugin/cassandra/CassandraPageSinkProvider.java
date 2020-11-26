@@ -29,13 +29,11 @@ public class CassandraPageSinkProvider
         implements ConnectorPageSinkProvider
 {
     private final CassandraSession cassandraSession;
-    private final int batchSize;
 
     @Inject
-    public CassandraPageSinkProvider(CassandraSession cassandraSession, CassandraClientConfig cassandraClientConfig)
+    public CassandraPageSinkProvider(CassandraSession cassandraSession)
     {
         this.cassandraSession = requireNonNull(cassandraSession, "cassandraSession is null");
-        this.batchSize = requireNonNull(cassandraClientConfig, "cassandraClientConfig is null").getBatchSize();
     }
 
     @Override
@@ -52,8 +50,7 @@ public class CassandraPageSinkProvider
                 handle.getTableName(),
                 handle.getColumnNames(),
                 handle.getColumnTypes(),
-                true,
-                batchSize);
+                true);
     }
 
     @Override
@@ -70,7 +67,6 @@ public class CassandraPageSinkProvider
                 handle.getTableName(),
                 handle.getColumnNames(),
                 handle.getColumnTypes(),
-                handle.isGenerateUuid(),
-                batchSize);
+                handle.isGenerateUuid());
     }
 }

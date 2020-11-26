@@ -23,7 +23,6 @@ import io.prestosql.connector.CatalogName;
 import io.prestosql.eventlistener.EventListenerManager;
 import io.prestosql.metadata.QualifiedObjectName;
 import io.prestosql.plugin.base.security.AllowAllSystemAccessControl;
-import io.prestosql.plugin.base.security.DefaultSystemAccessControl;
 import io.prestosql.plugin.base.security.FileBasedSystemAccessControl;
 import io.prestosql.plugin.base.security.ForwardingSystemAccessControl;
 import io.prestosql.plugin.base.security.ReadOnlySystemAccessControl;
@@ -62,6 +61,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -88,7 +88,8 @@ public class AccessControlManager
     private final Map<String, SystemAccessControlFactory> systemAccessControlFactories = new ConcurrentHashMap<>();
     private final Map<CatalogName, CatalogAccessControlEntry> connectorAccessControl = new ConcurrentHashMap<>();
 
-    private final AtomicReference<List<SystemAccessControl>> systemAccessControls = new AtomicReference<>();
+    private final AtomicReference<List<SystemAccessControl>> systemAccessControls = new AtomicReference<>(ImmutableList.of(new InitializingSystemAccessControl()));
+    private final AtomicBoolean systemAccessControlLoading = new AtomicBoolean();
 
     private final CounterStat authorizationSuccess = new CounterStat();
     private final CounterStat authorizationFail = new CounterStat();
@@ -138,6 +139,7 @@ public class AccessControlManager
             }
             configFiles = ImmutableList.of(CONFIG_FILE);
         }
+        checkState(systemAccessControlLoading.compareAndSet(false, true), "System access control already initialized");
 
         List<SystemAccessControl> systemAccessControls = configFiles.stream()
                 .map(this::createSystemAccessControl)
@@ -148,7 +150,7 @@ public class AccessControlManager
                 .flatMap(listeners -> ImmutableSet.copyOf(listeners).stream())
                 .forEach(eventListenerManager::addEventListener);
 
-        setSystemAccessControls(systemAccessControls);
+        this.systemAccessControls.set(systemAccessControls);
     }
 
     private SystemAccessControl createSystemAccessControl(File configFile)
@@ -181,11 +183,13 @@ public class AccessControlManager
         requireNonNull(name, "name is null");
         requireNonNull(properties, "properties is null");
 
+        checkState(systemAccessControlLoading.compareAndSet(false, true), "System access control already initialized");
+
         SystemAccessControlFactory systemAccessControlFactory = systemAccessControlFactories.get(name);
         checkState(systemAccessControlFactory != null, "Access control '%s' is not registered", name);
 
         SystemAccessControl systemAccessControl = systemAccessControlFactory.create(ImmutableMap.copyOf(properties));
-        setSystemAccessControls(ImmutableList.of(systemAccessControl));
+        this.systemAccessControls.set(ImmutableList.of(systemAccessControl));
     }
 
     @VisibleForTesting
@@ -196,12 +200,6 @@ public class AccessControlManager
                         .addAll(currentControls)
                         .add(systemAccessControl)
                         .build());
-    }
-
-    @VisibleForTesting
-    public void setSystemAccessControls(List<SystemAccessControl> systemAccessControls)
-    {
-        checkState(this.systemAccessControls.compareAndSet(null, systemAccessControls), "System access control already initialized");
     }
 
     @Override
@@ -258,7 +256,7 @@ public class AccessControlManager
     @Override
     public Set<String> filterQueriesOwnedBy(Identity identity, Set<String> queryOwners)
     {
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             queryOwners = systemAccessControl.filterViewQueryOwnedBy(new SystemSecurityContext(identity, Optional.empty()), queryOwners);
         }
         return queryOwners;
@@ -279,7 +277,7 @@ public class AccessControlManager
         requireNonNull(identity, "identity is null");
         requireNonNull(catalogs, "catalogs is null");
 
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             catalogs = systemAccessControl.filterCatalogs(new SystemSecurityContext(identity, Optional.empty()), catalogs);
         }
         return catalogs;
@@ -361,7 +359,7 @@ public class AccessControlManager
             return ImmutableSet.of();
         }
 
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             schemaNames = systemAccessControl.filterSchemas(securityContext.toSystemSecurityContext(), catalogName, schemaNames);
         }
 
@@ -488,7 +486,7 @@ public class AccessControlManager
             return ImmutableSet.of();
         }
 
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             tableNames = systemAccessControl.filterTables(securityContext.toSystemSecurityContext(), catalogName, tableNames);
         }
 
@@ -522,7 +520,7 @@ public class AccessControlManager
             return ImmutableList.of();
         }
 
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             columns = systemAccessControl.filterColumns(securityContext.toSystemSecurityContext(), table, columns);
         }
 
@@ -570,23 +568,6 @@ public class AccessControlManager
         systemAuthorizationCheck(control -> control.checkCanRenameColumn(securityContext.toSystemSecurityContext(), tableName.asCatalogSchemaTableName()));
 
         catalogAuthorizationCheck(tableName.getCatalogName(), securityContext, (control, context) -> control.checkCanRenameColumn(context, tableName.asSchemaTableName()));
-    }
-
-    @Override
-    public void checkCanSetTableAuthorization(SecurityContext securityContext, QualifiedObjectName tableName, PrestoPrincipal principal)
-    {
-        requireNonNull(securityContext, "securityContext is null");
-        requireNonNull(tableName, "tableName is null");
-        requireNonNull(principal, "principal is null");
-
-        checkCanAccessCatalog(securityContext, tableName.getCatalogName());
-
-        systemAuthorizationCheck(control -> control.checkCanSetTableAuthorization(securityContext.toSystemSecurityContext(), tableName.asCatalogSchemaTableName(), principal));
-
-        catalogAuthorizationCheck(
-                tableName.getCatalogName(),
-                securityContext,
-                (control, context) -> control.checkCanSetTableAuthorization(context, tableName.asSchemaTableName(), principal));
     }
 
     @Override
@@ -679,40 +660,6 @@ public class AccessControlManager
                 functionName,
                 new PrestoPrincipal(PrincipalType.USER, grantee.getUser()),
                 grantOption));
-    }
-
-    @Override
-    public void checkCanGrantSchemaPrivilege(SecurityContext securityContext, Privilege privilege, CatalogSchemaName schemaName, PrestoPrincipal grantee, boolean grantOption)
-    {
-        requireNonNull(securityContext, "securityContext is null");
-        requireNonNull(schemaName, "schemaName is null");
-        requireNonNull(privilege, "privilege is null");
-
-        checkCanAccessCatalog(securityContext, schemaName.getCatalogName());
-
-        systemAuthorizationCheck(control -> control.checkCanGrantSchemaPrivilege(securityContext.toSystemSecurityContext(), privilege, schemaName, grantee, grantOption));
-
-        catalogAuthorizationCheck(
-                schemaName.getCatalogName(),
-                securityContext,
-                (control, context) -> control.checkCanGrantSchemaPrivilege(context, privilege, schemaName.getSchemaName(), grantee, grantOption));
-    }
-
-    @Override
-    public void checkCanRevokeSchemaPrivilege(SecurityContext securityContext, Privilege privilege, CatalogSchemaName schemaName, PrestoPrincipal revokee, boolean grantOption)
-    {
-        requireNonNull(securityContext, "securityContext is null");
-        requireNonNull(schemaName, "schemaName is null");
-        requireNonNull(privilege, "privilege is null");
-
-        checkCanAccessCatalog(securityContext, schemaName.getCatalogName());
-
-        systemAuthorizationCheck(control -> control.checkCanRevokeSchemaPrivilege(securityContext.toSystemSecurityContext(), privilege, schemaName, revokee, grantOption));
-
-        catalogAuthorizationCheck(
-                schemaName.getCatalogName(),
-                securityContext,
-                (control, context) -> control.checkCanRevokeSchemaPrivilege(context, privilege, schemaName.getSchemaName(), revokee, grantOption));
     }
 
     @Override
@@ -928,7 +875,7 @@ public class AccessControlManager
                     .ifPresent(filters::add);
         }
 
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             systemAccessControl.getRowFilter(context.toSystemSecurityContext(), tableName.asCatalogSchemaTableName())
                     .ifPresent(filters::add);
         }
@@ -951,7 +898,7 @@ public class AccessControlManager
                     .ifPresent(masks::add);
         }
 
-        for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+        for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
             systemAccessControl.getColumnMask(context.toSystemSecurityContext(), tableName.asCatalogSchemaTableName(), columnName, type)
                     .ifPresent(masks::add);
         }
@@ -983,7 +930,7 @@ public class AccessControlManager
     private void checkCanAccessCatalog(SecurityContext securityContext, String catalogName)
     {
         try {
-            for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+            for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
                 systemAccessControl.checkCanAccessCatalog(securityContext.toSystemSecurityContext(), catalogName);
             }
             authorizationSuccess.update(1);
@@ -997,7 +944,7 @@ public class AccessControlManager
     private void systemAuthorizationCheck(Consumer<SystemAccessControl> check)
     {
         try {
-            for (SystemAccessControl systemAccessControl : getSystemAccessControls()) {
+            for (SystemAccessControl systemAccessControl : systemAccessControls.get()) {
                 check.accept(systemAccessControl);
             }
             authorizationSuccess.update(1);
@@ -1023,12 +970,6 @@ public class AccessControlManager
             authorizationFail.update(1);
             throw e;
         }
-    }
-
-    private List<SystemAccessControl> getSystemAccessControls()
-    {
-        return Optional.ofNullable(systemAccessControls.get())
-                .orElse(ImmutableList.of(new InitializingSystemAccessControl()));
     }
 
     private class CatalogAccessControlEntry

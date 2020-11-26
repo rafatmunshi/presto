@@ -28,18 +28,18 @@ public class TestMetastoreConfig
     public void testDefaults()
     {
         assertRecordedDefaults(recordDefaults(MetastoreConfig.class)
-                .setHideDeltaLakeTables(false));
+                .setMetastoreType("thrift"));
     }
 
     @Test
     public void testExplicitPropertyMappings()
     {
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
-                .put("hive.hide-delta-lake-tables", "true")
+                .put("hive.metastore", "foo")
                 .build();
 
         MetastoreConfig expected = new MetastoreConfig()
-                .setHideDeltaLakeTables(true);
+                .setMetastoreType("foo");
 
         assertFullMapping(properties, expected);
     }

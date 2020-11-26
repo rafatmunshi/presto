@@ -119,7 +119,7 @@ public class BigQuerySplitManager
             long numberOfRows;
             if (filter.isPresent()) {
                 // count the rows based on the filter
-                String sql = bigQueryClient.selectSql(tableId, "COUNT(*)");
+                String sql = bigQueryClient.selectSql(tableId, "COUNT(*)", new String[] {filter.get()});
                 TableResult result = bigQueryClient.query(sql);
                 numberOfRows = result.iterateAll().iterator().next().get(0).getLongValue();
             }

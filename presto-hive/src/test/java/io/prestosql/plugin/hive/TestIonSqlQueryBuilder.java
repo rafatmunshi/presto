@@ -21,7 +21,6 @@ import io.prestosql.spi.predicate.SortedRangeSet;
 import io.prestosql.spi.predicate.TupleDomain;
 import io.prestosql.spi.type.DecimalType;
 import io.prestosql.spi.type.TypeManager;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.type.InternalTypeManager;
 import io.prestosql.util.DateTimeUtils;
 import org.testng.annotations.Test;
@@ -51,7 +50,7 @@ import static org.testng.Assert.assertEquals;
 
 public class TestIonSqlQueryBuilder
 {
-    private final TypeManager typeManager = new InternalTypeManager(createTestMetadataManager(), new TypeOperators());
+    private final TypeManager typeManager = new InternalTypeManager(createTestMetadataManager());
 
     @Test
     public void testBuildSQL()

@@ -32,7 +32,9 @@ import io.prestosql.spi.connector.FixedPageSource;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.gen.ExpressionCompiler;
 import io.prestosql.sql.gen.PageFunctionCompiler;
+import io.prestosql.sql.parser.SqlParser;
 import io.prestosql.sql.planner.Symbol;
+import io.prestosql.sql.planner.TypeAnalyzer;
 import io.prestosql.sql.planner.TypeProvider;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.sql.relational.RowExpression;
@@ -99,6 +101,7 @@ public class BenchmarkScanFilterAndProjectOperator
 
     private static final Session TEST_SESSION = TestingSession.testSessionBuilder().build();
     private static final Metadata METADATA = createTestMetadataManager();
+    private static final TypeAnalyzer TYPE_ANALYZER = new TypeAnalyzer(new SqlParser(), METADATA);
 
     private static final int TOTAL_POSITIONS = 1_000_000;
     private static final DataSize FILTER_AND_PROJECT_MIN_OUTPUT_PAGE_SIZE = DataSize.of(500, KILOBYTE);
@@ -129,8 +132,8 @@ public class BenchmarkScanFilterAndProjectOperator
         @Setup
         public void setup()
         {
-            executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-%s"));
-            scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+            executor = newCachedThreadPool(daemonThreadsNamed("test-executor-%s"));
+            scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("test-scheduledExecutor-%s"));
 
             Type type = TYPE_MAP.get(this.type);
 

@@ -15,7 +15,6 @@ package io.prestosql.sql.planner.sanity;
 
 import com.google.common.collect.ImmutableList;
 import io.prestosql.execution.warnings.WarningCollector;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.PlanNodeIdAllocator;
 import io.prestosql.sql.planner.Symbol;
 import io.prestosql.sql.planner.plan.Assignments;
@@ -29,7 +28,6 @@ import org.testng.annotations.Test;
 public class TestVerifyOnlyOneOutputNode
 {
     private final PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
-    private final TypeOperators typeOperators = new TypeOperators();
 
     @Test
     public void testValidateSuccessful()
@@ -42,7 +40,7 @@ public class TestVerifyOnlyOneOutputNode
                                         idAllocator.getNextId(), ImmutableList.of(), ImmutableList.of()),
                                 Assignments.of()
                         ), ImmutableList.of(), ImmutableList.of());
-        new VerifyOnlyOneOutputNode().validate(root, null, null, typeOperators, null, null, WarningCollector.NOOP);
+        new VerifyOnlyOneOutputNode().validate(root, null, null, null, null, WarningCollector.NOOP);
     }
 
     @Test(expectedExceptions = IllegalStateException.class)
@@ -59,9 +57,8 @@ public class TestVerifyOnlyOneOutputNode
                                                 Assignments.of()
                                         ), ImmutableList.of(), ImmutableList.of()
                                 ), new Symbol("a"),
-                                ImmutableList.of(),
                                 false),
                         ImmutableList.of(), ImmutableList.of());
-        new VerifyOnlyOneOutputNode().validate(root, null, null, typeOperators, null, null, WarningCollector.NOOP);
+        new VerifyOnlyOneOutputNode().validate(root, null, null, null, null, WarningCollector.NOOP);
     }
 }

@@ -24,7 +24,6 @@ import io.prestosql.spi.Page;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spiller.PartitioningSpillerFactory;
 import io.prestosql.sql.planner.plan.PlanNodeId;
-import io.prestosql.type.BlockTypeOperators;
 
 import java.util.List;
 import java.util.Optional;
@@ -63,7 +62,6 @@ public class LookupJoinOperatorFactory
             List<Type> buildOutputTypes,
             JoinType joinType,
             JoinProbeFactory joinProbeFactory,
-            BlockTypeOperators blockTypeOperators,
             OptionalInt totalOperatorsCount,
             List<Integer> probeJoinChannels,
             OptionalInt probeHashChannel,
@@ -103,7 +101,7 @@ public class LookupJoinOperatorFactory
             List<Type> hashTypes = probeJoinChannels.stream()
                     .map(probeTypes::get)
                     .collect(toImmutableList());
-            this.probeHashGenerator = new InterpretedHashGenerator(hashTypes, probeJoinChannels, blockTypeOperators);
+            this.probeHashGenerator = new InterpretedHashGenerator(hashTypes, probeJoinChannels);
         }
 
         this.partitioningSpillerFactory = requireNonNull(partitioningSpillerFactory, "partitioningSpillerFactory is null");

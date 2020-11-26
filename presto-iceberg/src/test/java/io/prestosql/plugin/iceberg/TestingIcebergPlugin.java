@@ -27,6 +27,11 @@ public class TestingIcebergPlugin
 {
     private final Optional<HiveMetastore> metastore;
 
+    public TestingIcebergPlugin()
+    {
+        this.metastore = Optional.empty();
+    }
+
     public TestingIcebergPlugin(HiveMetastore metastore)
     {
         this.metastore = Optional.of(requireNonNull(metastore, "metastore is null"));

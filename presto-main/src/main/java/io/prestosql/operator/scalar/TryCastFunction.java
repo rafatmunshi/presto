@@ -86,8 +86,7 @@ public class TryCastFunction
         MethodHandle tryCastHandle = catchException(coercion, RuntimeException.class, exceptionHandler);
 
         boolean nullableArgument = functionDependencies.getCastMetadata(fromType, toType).getArgumentDefinitions().get(0).isNullable();
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 NULLABLE_RETURN,
                 ImmutableList.of(nullableArgument ? BOXED_NULLABLE : NEVER_NULL),
                 tryCastHandle);

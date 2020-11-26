@@ -65,8 +65,7 @@ public class ArrayFlattenFunction
         MethodHandle methodHandle = METHOD_HANDLE
                 .bindTo(functionBinding.getTypeVariable("E"))
                 .bindTo(functionBinding.getBoundSignature().getReturnType());
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 ImmutableList.of(NEVER_NULL),
                 methodHandle);

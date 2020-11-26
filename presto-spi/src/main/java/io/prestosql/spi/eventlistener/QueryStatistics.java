@@ -26,7 +26,6 @@ public class QueryStatistics
     private final Duration queuedTime;
     private final Optional<Duration> waitingTime;
     private final Optional<Duration> analysisTime;
-    private final Optional<Duration> planningTime;
     private final Optional<Duration> executionTime;
 
     private final long peakUserMemoryBytes;
@@ -71,7 +70,6 @@ public class QueryStatistics
             Duration queuedTime,
             Optional<Duration> waitingTime,
             Optional<Duration> analysisTime,
-            Optional<Duration> planningTime,
             Optional<Duration> executionTime,
             long peakUserMemoryBytes,
             long peakTotalNonRevocableMemoryBytes,
@@ -100,7 +98,6 @@ public class QueryStatistics
         this.waitingTime = requireNonNull(waitingTime, "waitingTime is null");
         this.queuedTime = requireNonNull(queuedTime, "queuedTime is null");
         this.analysisTime = requireNonNull(analysisTime, "analysisTime is null");
-        this.planningTime = requireNonNull(planningTime, "planningTime is null");
         this.executionTime = requireNonNull(executionTime, "executionTime is null");
         this.peakUserMemoryBytes = peakUserMemoryBytes;
         this.peakTotalNonRevocableMemoryBytes = peakTotalNonRevocableMemoryBytes;
@@ -148,11 +145,6 @@ public class QueryStatistics
     public Optional<Duration> getAnalysisTime()
     {
         return analysisTime;
-    }
-
-    public Optional<Duration> getPlanningTime()
-    {
-        return planningTime;
     }
 
     public Optional<Duration> getExecutionTime()

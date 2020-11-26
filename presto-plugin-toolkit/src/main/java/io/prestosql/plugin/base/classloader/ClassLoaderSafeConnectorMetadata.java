@@ -286,14 +286,6 @@ public class ClassLoaderSafeConnectorMetadata
     }
 
     @Override
-    public void setTableAuthorization(ConnectorSession session, SchemaTableName table, PrestoPrincipal principal)
-    {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            delegate.setTableAuthorization(session, table, principal);
-        }
-    }
-
-    @Override
     public void createSchema(ConnectorSession session, String schemaName, Map<String, Object> properties, PrestoPrincipal owner)
     {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
@@ -663,22 +655,6 @@ public class ClassLoaderSafeConnectorMetadata
     {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             return delegate.listEnabledRoles(session);
-        }
-    }
-
-    @Override
-    public void grantSchemaPrivileges(ConnectorSession session, String schemaName, Set<Privilege> privileges, PrestoPrincipal grantee, boolean grantOption)
-    {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            delegate.grantSchemaPrivileges(session, schemaName, privileges, grantee, grantOption);
-        }
-    }
-
-    @Override
-    public void revokeSchemaPrivileges(ConnectorSession session, String schemaName, Set<Privilege> privileges, PrestoPrincipal grantee, boolean grantOption)
-    {
-        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            delegate.revokeSchemaPrivileges(session, schemaName, privileges, grantee, grantOption);
         }
     }
 

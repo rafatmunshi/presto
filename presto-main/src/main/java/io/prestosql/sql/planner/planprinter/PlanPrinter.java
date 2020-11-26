@@ -820,14 +820,14 @@ public class PlanPrinter
         private String printDynamicFilters(Collection<DynamicFilters.Descriptor> filters)
         {
             return filters.stream()
-                    .map(filter -> filter.getInput() + " " + filter.getOperator().getValue() + " #" + filter.getId())
+                    .map(filter -> filter.getId() + " -> " + filter.getInput())
                     .collect(Collectors.joining(", ", "{", "}"));
         }
 
         private String printDynamicFilterAssignments(Map<DynamicFilterId, Symbol> filters)
         {
             return filters.entrySet().stream()
-                    .map(filter -> filter.getValue() + " -> #" + filter.getKey())
+                    .map(filter -> filter.getValue() + " -> " + filter.getKey())
                     .collect(Collectors.joining(", ", "{", "}"));
         }
 

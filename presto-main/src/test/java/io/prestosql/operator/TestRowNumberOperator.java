@@ -22,11 +22,9 @@ import io.prestosql.spi.Page;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.gen.JoinCompiler;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.testing.MaterializedResult;
-import io.prestosql.type.BlockTypeOperators;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
@@ -43,6 +41,7 @@ import static io.airlift.testing.Assertions.assertEqualsIgnoreOrder;
 import static io.airlift.testing.Assertions.assertGreaterThan;
 import static io.prestosql.RowPagesBuilder.rowPagesBuilder;
 import static io.prestosql.SessionTestUtils.TEST_SESSION;
+import static io.prestosql.metadata.MetadataManager.createTestMetadataManager;
 import static io.prestosql.operator.GroupByHashYieldAssertion.createPagesWithDistinctHashKeys;
 import static io.prestosql.operator.GroupByHashYieldAssertion.finishOperatorWithYieldingGroupByHash;
 import static io.prestosql.operator.OperatorAssertion.toMaterializedResult;
@@ -62,15 +61,13 @@ public class TestRowNumberOperator
 {
     private ExecutorService executor;
     private ScheduledExecutorService scheduledExecutor;
-    private final TypeOperators typeOperators = new TypeOperators();
-    private final BlockTypeOperators blockTypeOperators = new BlockTypeOperators(typeOperators);
-    private final JoinCompiler joinCompiler = new JoinCompiler(typeOperators);
+    private JoinCompiler joinCompiler = new JoinCompiler(createTestMetadataManager());
 
     @BeforeClass
     public void setUp()
     {
-        executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-%s"));
-        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+        executor = newCachedThreadPool(daemonThreadsNamed("test-executor-%s"));
+        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("test-scheduledExecutor-%s"));
     }
 
     @AfterClass(alwaysRun = true)
@@ -128,8 +125,7 @@ public class TestRowNumberOperator
                 Optional.empty(),
                 Optional.empty(),
                 10,
-                joinCompiler,
-                blockTypeOperators);
+                joinCompiler);
 
         MaterializedResult expectedResult = resultBuilder(driverContext.getSession(), DOUBLE, BIGINT)
                 .row(0.3, 1L)
@@ -168,8 +164,7 @@ public class TestRowNumberOperator
                 Optional.empty(),
                 Optional.empty(),
                 1,
-                joinCompiler,
-                blockTypeOperators);
+                joinCompiler);
 
         // get result with yield; pick a relatively small buffer for partitionRowCount's memory usage
         GroupByHashYieldAssertion.GroupByHashYieldResult result = finishOperatorWithYieldingGroupByHash(input, type, operatorFactory, operator -> ((RowNumberOperator) operator).getCapacity(), 1_400_000);
@@ -217,8 +212,7 @@ public class TestRowNumberOperator
                 Optional.of(10),
                 rowPagesBuilder.getHashChannel(),
                 10,
-                joinCompiler,
-                blockTypeOperators);
+                joinCompiler);
 
         MaterializedResult expectedPartition1 = resultBuilder(driverContext.getSession(), DOUBLE, BIGINT)
                 .row(0.3, 1L)
@@ -284,8 +278,7 @@ public class TestRowNumberOperator
                 Optional.of(3),
                 Optional.empty(),
                 10,
-                joinCompiler,
-                blockTypeOperators);
+                joinCompiler);
 
         MaterializedResult expectedPartition1 = resultBuilder(driverContext.getSession(), DOUBLE, BIGINT)
                 .row(0.3, 1L)
@@ -354,8 +347,7 @@ public class TestRowNumberOperator
                 Optional.of(3),
                 Optional.empty(),
                 10,
-                joinCompiler,
-                blockTypeOperators);
+                joinCompiler);
 
         MaterializedResult expectedRows = resultBuilder(driverContext.getSession(), DOUBLE, BIGINT, BIGINT)
                 .row(0.3, 1L)

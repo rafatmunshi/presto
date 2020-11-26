@@ -26,7 +26,6 @@ import io.prestosql.spi.connector.RecordCursor;
 import io.prestosql.spi.connector.RecordSet;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.gen.JoinCompiler;
-import io.prestosql.type.BlockTypeOperators;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntListIterator;
@@ -56,8 +55,7 @@ public class UnloadedIndexKeyRecordSet
             Set<Integer> channelsForDistinct,
             List<Type> types,
             List<UpdateRequest> requests,
-            JoinCompiler joinCompiler,
-            BlockTypeOperators blockTypeOperators)
+            JoinCompiler joinCompiler)
     {
         requireNonNull(existingSnapshot, "existingSnapshot is null");
         this.types = ImmutableList.copyOf(requireNonNull(types, "types is null"));
@@ -72,7 +70,7 @@ public class UnloadedIndexKeyRecordSet
         }
 
         ImmutableList.Builder<PageAndPositions> builder = ImmutableList.builder();
-        GroupByHash groupByHash = createGroupByHash(session, distinctChannelTypes, normalizedDistinctChannels, Optional.empty(), 10_000, joinCompiler, blockTypeOperators);
+        GroupByHash groupByHash = createGroupByHash(session, distinctChannelTypes, normalizedDistinctChannels, Optional.empty(), 10_000, joinCompiler);
         for (UpdateRequest request : requests) {
             Page page = request.getPage();
 

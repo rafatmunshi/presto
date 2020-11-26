@@ -47,7 +47,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
 import static io.airlift.concurrent.MoreFutures.tryGetFutureValue;
-import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static io.prestosql.SessionTestUtils.TEST_SESSION;
 import static io.prestosql.execution.QueryState.DISPATCHING;
 import static io.prestosql.execution.QueryState.FAILED;
@@ -92,13 +91,12 @@ public class TestQueryStateMachine
     private static final List<String> RESET_SESSION_PROPERTIES = ImmutableList.of("candy");
     private static final Optional<QueryType> QUERY_TYPE = Optional.of(QueryType.SELECT);
 
-    private ExecutorService executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "=%s"));
+    private final ExecutorService executor = newCachedThreadPool();
 
     @AfterClass(alwaysRun = true)
     public void tearDown()
     {
         executor.shutdownNow();
-        executor = null;
     }
 
     @Test

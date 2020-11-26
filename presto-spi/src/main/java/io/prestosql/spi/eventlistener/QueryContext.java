@@ -28,7 +28,6 @@ public class QueryContext
 {
     private final String user;
     private final Optional<String> principal;
-    private final Set<String> groups;
     private final Optional<String> traceToken;
     private final Optional<String> remoteClientAddress;
     private final Optional<String> userAgent;
@@ -54,7 +53,6 @@ public class QueryContext
     public QueryContext(
             String user,
             Optional<String> principal,
-            Set<String> groups,
             Optional<String> traceToken,
             Optional<String> remoteClientAddress,
             Optional<String> userAgent,
@@ -74,7 +72,6 @@ public class QueryContext
     {
         this.user = requireNonNull(user, "user is null");
         this.principal = requireNonNull(principal, "principal is null");
-        this.groups = requireNonNull(groups, "groups is null");
         this.traceToken = requireNonNull(traceToken, "traceToken is null");
         this.remoteClientAddress = requireNonNull(remoteClientAddress, "remoteClientAddress is null");
         this.userAgent = requireNonNull(userAgent, "userAgent is null");
@@ -103,12 +100,6 @@ public class QueryContext
     public Optional<String> getPrincipal()
     {
         return principal;
-    }
-
-    @JsonProperty
-    public Set<String> getGroups()
-    {
-        return groups;
     }
 
     @JsonProperty

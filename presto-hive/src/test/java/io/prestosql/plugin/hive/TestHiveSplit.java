@@ -70,7 +70,6 @@ public class TestHiveSplit
                 partitionKeys,
                 addresses,
                 OptionalInt.empty(),
-                0,
                 true,
                 TableToPartitionMapping.mapColumnsByIndex(ImmutableMap.of(1, new HiveTypeName("string"))),
                 Optional.of(new HiveSplit.BucketConversion(

@@ -136,7 +136,7 @@ public class HivePageSinkProvider
                 handle.getSchemaName(),
                 handle.getTableName(),
                 isCreateTable,
-                handle.getTransaction(),
+                handle.isTransactional(),
                 handle.getInputColumns(),
                 handle.getTableStorageFormat(),
                 handle.getPartitionStorageFormat(),

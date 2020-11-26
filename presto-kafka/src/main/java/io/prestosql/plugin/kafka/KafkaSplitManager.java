@@ -53,15 +53,13 @@ public class KafkaSplitManager
         implements ConnectorSplitManager
 {
     private final KafkaConsumerFactory consumerFactory;
-    private final KafkaFilterManager kafkaFilterManager;
     private final int messagesPerSplit;
 
     @Inject
-    public KafkaSplitManager(KafkaConsumerFactory consumerFactory, KafkaConfig kafkaConfig, KafkaFilterManager kafkaFilterManager)
+    public KafkaSplitManager(KafkaConsumerFactory consumerFactory, KafkaConfig kafkaConfig)
     {
         this.consumerFactory = requireNonNull(consumerFactory, "consumerManager is null");
-        this.messagesPerSplit = requireNonNull(kafkaConfig, "kafkaConfig is null").getMessagesPerSplit();
-        this.kafkaFilterManager = requireNonNull(kafkaFilterManager, "kafkaFilterManager is null");
+        messagesPerSplit = requireNonNull(kafkaConfig, "kafkaConfig is null").getMessagesPerSplit();
     }
 
     @Override
@@ -82,18 +80,12 @@ public class KafkaSplitManager
 
             Map<TopicPartition, Long> partitionBeginOffsets = kafkaConsumer.beginningOffsets(topicPartitions);
             Map<TopicPartition, Long> partitionEndOffsets = kafkaConsumer.endOffsets(topicPartitions);
-            KafkaFilteringResult kafkaFilteringResult = kafkaFilterManager.getKafkaFilterResult(session, kafkaTableHandle,
-                    partitionInfos, partitionBeginOffsets, partitionEndOffsets);
-            partitionInfos = kafkaFilteringResult.getPartitionInfos();
-            partitionBeginOffsets = kafkaFilteringResult.getPartitionBeginOffsets();
-            partitionEndOffsets = kafkaFilteringResult.getPartitionEndOffsets();
 
             ImmutableList.Builder<KafkaSplit> splits = ImmutableList.builder();
             Optional<String> keyDataSchemaContents = kafkaTableHandle.getKeyDataSchemaLocation()
                     .map(KafkaSplitManager::readSchema);
             Optional<String> messageDataSchemaContents = kafkaTableHandle.getMessageDataSchemaLocation()
                     .map(KafkaSplitManager::readSchema);
-
             for (PartitionInfo partitionInfo : partitionInfos) {
                 TopicPartition topicPartition = toTopicPartition(partitionInfo);
                 HostAddress leader = HostAddress.fromParts(partitionInfo.leader().host(), partitionInfo.leader().port());
@@ -127,27 +119,39 @@ public class KafkaSplitManager
 
     private static String readSchema(String dataSchemaLocation)
     {
-        try (InputStream inputStream = openSchemaLocation(dataSchemaLocation)) {
+        InputStream inputStream = null;
+        try {
+            if (isURI(dataSchemaLocation.trim().toLowerCase(ENGLISH))) {
+                try {
+                    inputStream = new URL(dataSchemaLocation).openStream();
+                }
+                catch (MalformedURLException e) {
+                    // try again before failing
+                    inputStream = new FileInputStream(dataSchemaLocation);
+                }
+            }
+            else {
+                inputStream = new FileInputStream(dataSchemaLocation);
+            }
             return CharStreams.toString(new InputStreamReader(inputStream, UTF_8));
         }
         catch (IOException e) {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "Could not parse the Avro schema at: " + dataSchemaLocation, e);
         }
+        finally {
+            closeQuietly(inputStream);
+        }
     }
 
-    private static InputStream openSchemaLocation(String dataSchemaLocation)
-            throws IOException
+    private static void closeQuietly(InputStream stream)
     {
-        if (isURI(dataSchemaLocation.trim().toLowerCase(ENGLISH))) {
-            try {
-                return new URL(dataSchemaLocation).openStream();
-            }
-            catch (MalformedURLException ignore) {
-                // TODO probably should not be ignored
+        try {
+            if (stream != null) {
+                stream.close();
             }
         }
-
-        return new FileInputStream(dataSchemaLocation);
+        catch (IOException ignored) {
+        }
     }
 
     private static boolean isURI(String location)

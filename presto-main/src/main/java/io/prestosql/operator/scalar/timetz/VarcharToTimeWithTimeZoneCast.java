@@ -36,7 +36,6 @@ import static io.prestosql.type.DateTimes.NANOSECONDS_PER_DAY;
 import static io.prestosql.type.DateTimes.NANOSECONDS_PER_SECOND;
 import static io.prestosql.type.DateTimes.PICOSECONDS_PER_DAY;
 import static io.prestosql.type.DateTimes.PICOSECONDS_PER_SECOND;
-import static io.prestosql.type.DateTimes.calculateOffsetMinutes;
 import static io.prestosql.type.DateTimes.getOffsetMinutes;
 import static io.prestosql.type.DateTimes.isValidOffset;
 import static io.prestosql.type.DateTimes.rescale;
@@ -111,7 +110,6 @@ public final class VarcharToTimeWithTimeZoneCast
     private static int parseOffset(ConnectorSession session, Matcher matcher)
     {
         if (matcher.group("offsetHour") != null && matcher.group("offsetMinute") != null) {
-            int offsetSign = matcher.group("sign").equals("+") ? 1 : -1;
             int offsetHour = Integer.parseInt((matcher.group("offsetHour")));
             int offsetMinute = Integer.parseInt((matcher.group("offsetMinute")));
 
@@ -119,7 +117,7 @@ public final class VarcharToTimeWithTimeZoneCast
                 throw new IllegalArgumentException("Invalid time");
             }
 
-            return calculateOffsetMinutes(offsetSign, offsetHour, offsetMinute);
+            return offsetHour * 60 + offsetMinute;
         }
 
         return getOffsetMinutes(session.getStart(), session.getTimeZoneKey());

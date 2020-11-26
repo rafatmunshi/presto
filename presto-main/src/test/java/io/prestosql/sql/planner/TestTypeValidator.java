@@ -23,7 +23,6 @@ import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.ResolvedFunction;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.predicate.TupleDomain;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spi.type.VarcharType;
 import io.prestosql.sql.parser.SqlParser;
 import io.prestosql.sql.planner.plan.AggregationNode;
@@ -69,7 +68,6 @@ public class TestTypeValidator
     private static final TypeValidator TYPE_VALIDATOR = new TypeValidator();
 
     private final Metadata metadata = createTestMetadataManager();
-    private final TypeOperators typeOperators = new TypeOperators();
     private SymbolAllocator symbolAllocator;
     private TableScanNode baseTableScan;
     private Symbol columnA;
@@ -149,9 +147,7 @@ public class TestTypeValidator
                 WindowFrame.Type.RANGE,
                 FrameBound.Type.UNBOUNDED_PRECEDING,
                 Optional.empty(),
-                Optional.empty(),
                 FrameBound.Type.UNBOUNDED_FOLLOWING,
-                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
@@ -284,9 +280,7 @@ public class TestTypeValidator
                 WindowFrame.Type.RANGE,
                 FrameBound.Type.UNBOUNDED_PRECEDING,
                 Optional.empty(),
-                Optional.empty(),
                 FrameBound.Type.UNBOUNDED_FOLLOWING,
-                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
@@ -317,9 +311,7 @@ public class TestTypeValidator
                 WindowFrame.Type.RANGE,
                 FrameBound.Type.UNBOUNDED_PRECEDING,
                 Optional.empty(),
-                Optional.empty(),
                 FrameBound.Type.UNBOUNDED_FOLLOWING,
-                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
@@ -361,7 +353,7 @@ public class TestTypeValidator
     private void assertTypesValid(PlanNode node)
     {
         Metadata metadata = createTestMetadataManager();
-        TYPE_VALIDATOR.validate(node, TEST_SESSION, metadata, typeOperators, new TypeAnalyzer(SQL_PARSER, metadata), symbolAllocator.getTypes(), WarningCollector.NOOP);
+        TYPE_VALIDATOR.validate(node, TEST_SESSION, metadata, new TypeAnalyzer(SQL_PARSER, metadata), symbolAllocator.getTypes(), WarningCollector.NOOP);
     }
 
     private static PlanNodeId newId()

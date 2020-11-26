@@ -17,14 +17,10 @@ import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import io.prestosql.Session;
-import io.prestosql.metadata.Metadata;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.connector.DynamicFilter;
 import io.prestosql.spi.predicate.Domain;
 import io.prestosql.spi.predicate.TupleDomain;
-import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.plan.DynamicFilterId;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -39,29 +35,22 @@ import java.util.concurrent.CompletableFuture;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
+import static com.google.common.collect.ImmutableSetMultimap.toImmutableSetMultimap;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.airlift.concurrent.MoreFutures.addSuccessCallback;
 import static io.airlift.concurrent.MoreFutures.unmodifiableFuture;
 import static io.prestosql.sql.DynamicFilters.Descriptor;
-import static io.prestosql.sql.DynamicFilters.extractSourceSymbols;
-import static io.prestosql.sql.planner.DomainCoercer.applySaturatedCasts;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 @ThreadSafe
 class LocalDynamicFiltersCollector
 {
-    private final Metadata metadata;
-    private final TypeOperators typeOperators;
-    private final Session session;
     // Each future blocks until its dynamic filter is collected.
     private final Map<DynamicFilterId, SettableFuture<Domain>> futures = new HashMap<>();
 
-    public LocalDynamicFiltersCollector(Metadata metadata, TypeOperators typeOperators, Session session)
+    public LocalDynamicFiltersCollector()
     {
-        this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
-        this.session = requireNonNull(session, "session is null");
     }
 
     // Called during JoinNode planning (no need to be synchronized as local planning is single threaded)
@@ -88,35 +77,29 @@ class LocalDynamicFiltersCollector
     }
 
     // Called during TableScan planning (no need to be synchronized as local planning is single threaded)
-    public DynamicFilter createDynamicFilter(List<Descriptor> descriptors, Map<Symbol, ColumnHandle> columnsMap, TypeProvider typeProvider)
+    public DynamicFilter createDynamicFilter(List<Descriptor> descriptors, Map<Symbol, ColumnHandle> columnsMap)
     {
-        Multimap<DynamicFilterId, Descriptor> descriptorMap = extractSourceSymbols(descriptors);
+        Multimap<DynamicFilterId, Symbol> symbolsMap = descriptors.stream()
+                .collect(toImmutableSetMultimap(Descriptor::getId, descriptor -> Symbol.from(descriptor.getInput())));
 
         // Iterate over dynamic filters that are collected (correspond to one of the futures), and required for filtering (correspond to one of the descriptors).
         // It is possible that some dynamic filters are collected in a different stage - and will not available here.
         // It is also possible that not all local dynamic filters are needed for this specific table scan.
-        List<ListenableFuture<TupleDomain<ColumnHandle>>> predicateFutures = descriptorMap.keySet().stream()
+        List<ListenableFuture<TupleDomain<ColumnHandle>>> predicateFutures = symbolsMap.keySet().stream()
                 .filter(futures.keySet()::contains)
                 .map(filterId -> {
                     // Probe-side columns that can be filtered with this dynamic filter resulting domain.
+                    List<ColumnHandle> probeColumns = symbolsMap.get(filterId).stream()
+                            .map(probeSymbol -> requireNonNull(columnsMap.get(probeSymbol), () -> format("Missing probe column for %s", probeSymbol)))
+                            .collect(toImmutableList());
                     return Futures.transform(
                             requireNonNull(futures.get(filterId), () -> format("Missing dynamic filter %s", filterId)),
                             // Construct a probe-side predicate by duplicating the resulting domain over the corresponding columns.
                             domain -> TupleDomain.withColumnDomains(
-                                    descriptorMap.get(filterId).stream()
+                                    probeColumns.stream()
                                             .collect(toImmutableMap(
-                                                    descriptor -> {
-                                                        Symbol probeSymbol = Symbol.from(descriptor.getInput());
-                                                        return requireNonNull(columnsMap.get(probeSymbol), () -> format("Missing probe column for %s", probeSymbol));
-                                                    },
-                                                    descriptor -> {
-                                                        Type targetType = typeProvider.get(Symbol.from(descriptor.getInput()));
-                                                        Domain updatedDomain = descriptor.applyComparison(domain);
-                                                        if (!updatedDomain.getType().equals(targetType)) {
-                                                            return applySaturatedCasts(metadata, typeOperators, session, updatedDomain, targetType);
-                                                        }
-                                                        return updatedDomain;
-                                                    }))),
+                                                    column -> column,
+                                                    column -> domain))),
                             directExecutor());
                 })
                 .collect(toImmutableList());

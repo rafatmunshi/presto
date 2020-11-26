@@ -134,7 +134,6 @@ public class SqlTaskManager
         clientTimeout = config.getClientTimeout();
 
         DataSize maxBufferSize = config.getSinkMaxBufferSize();
-        DataSize maxBroadcastBufferSize = config.getSinkMaxBroadcastBufferSize();
 
         taskNotificationExecutor = newFixedThreadPool(config.getTaskNotificationThreads(), threadsNamed("task-notification-%s"));
         taskNotificationExecutorMBean = new ThreadPoolExecutorMBean((ThreadPoolExecutor) taskNotificationExecutor);
@@ -169,7 +168,6 @@ public class SqlTaskManager
                             return null;
                         },
                         maxBufferSize,
-                        maxBroadcastBufferSize,
                         failedTasks)));
     }
 
@@ -373,21 +371,20 @@ public class SqlTaskManager
         requireNonNull(sources, "sources is null");
         requireNonNull(outputBuffers, "outputBuffers is null");
 
+        long sessionQueryMaxMemoryPerNode = getQueryMaxMemoryPerNode(session).toBytes();
+        long sessionQueryTotalMaxMemoryPerNode = getQueryMaxTotalMemoryPerNode(session).toBytes();
+        // Session property query_max_memory_per_node is used to only decrease memory limit
+        if (sessionQueryMaxMemoryPerNode <= queryMaxMemoryPerNode) {
+            queryContexts.getUnchecked(taskId.getQueryId()).setMaxUserMemory(sessionQueryMaxMemoryPerNode);
+        }
+
+        if (sessionQueryTotalMaxMemoryPerNode <= queryMaxTotalMemoryPerNode) {
+            queryContexts.getUnchecked(taskId.getQueryId()).setMaxTotalMemory(sessionQueryTotalMaxMemoryPerNode);
+        }
+
         if (resourceOvercommit(session)) {
             // TODO: This should have been done when the QueryContext was created. However, the session isn't available at that point.
             queryContexts.getUnchecked(taskId.getQueryId()).setResourceOvercommit();
-        }
-        else {
-            long sessionQueryMaxMemoryPerNode = getQueryMaxMemoryPerNode(session).toBytes();
-            long sessionQueryTotalMaxMemoryPerNode = getQueryMaxTotalMemoryPerNode(session).toBytes();
-            // Session property query_max_memory_per_node is used to only decrease memory limit
-            if (sessionQueryMaxMemoryPerNode <= queryMaxMemoryPerNode) {
-                queryContexts.getUnchecked(taskId.getQueryId()).setMaxUserMemory(sessionQueryMaxMemoryPerNode);
-            }
-
-            if (sessionQueryTotalMaxMemoryPerNode <= queryMaxTotalMemoryPerNode) {
-                queryContexts.getUnchecked(taskId.getQueryId()).setMaxTotalMemory(sessionQueryTotalMaxMemoryPerNode);
-            }
         }
 
         SqlTask sqlTask = tasks.getUnchecked(taskId);

@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.prestosql</groupId>
         <artifactId>presto-root</artifactId>
-        <version>346-SNAPSHOT</version>
+        <version>344-SNAPSHOT</version>
     </parent>
 
     <artifactId>presto-product-tests</artifactId>
@@ -25,21 +25,6 @@
 
         <dependency>
             <groupId>io.prestosql</groupId>
-            <artifactId>presto-hive</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.prestosql.hive</groupId>
-                    <artifactId>hive-apache</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.httpcomponents</groupId>
-                    <artifactId>httpclient</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
-            <groupId>io.prestosql</groupId>
             <artifactId>presto-jdbc</artifactId>
         </dependency>
 
@@ -51,11 +36,6 @@
         <dependency>
             <groupId>io.prestosql.cassandra</groupId>
             <artifactId>cassandra-driver</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.prestosql.hive</groupId>
-            <artifactId>hive-apache</artifactId>
         </dependency>
 
         <dependency>
@@ -119,8 +99,8 @@
         </dependency>
 
         <dependency>
-            <groupId>org.apache.thrift</groupId>
-            <artifactId>libthrift</artifactId>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
         </dependency>
 
         <dependency>
@@ -131,6 +111,12 @@
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.prestosql.hive</groupId>
+            <artifactId>hive-apache</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>

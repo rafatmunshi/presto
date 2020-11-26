@@ -52,7 +52,6 @@ public class HiveSecurityModule
                         new ReadOnlySecurityModule(),
                         new StaticAccessControlMetadataModule()));
         bindSecurityModule("sql-standard", new SqlStandardSecurityModule());
-        bindSecurityModule("allow-all", new AllowAllSecurityModule());
     }
 
     private void bindSecurityModule(String name, Module module)

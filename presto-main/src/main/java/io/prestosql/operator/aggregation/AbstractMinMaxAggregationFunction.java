@@ -35,7 +35,7 @@ import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.function.AccumulatorState;
 import io.prestosql.spi.function.AccumulatorStateFactory;
 import io.prestosql.spi.function.AccumulatorStateSerializer;
-import io.prestosql.spi.function.InvocationConvention;
+import io.prestosql.spi.function.OperatorType;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.TypeSignature;
 
@@ -52,14 +52,10 @@ import static io.prestosql.operator.aggregation.AggregationMetadata.ParameterMet
 import static io.prestosql.operator.aggregation.AggregationMetadata.ParameterMetadata.ParameterType.INPUT_CHANNEL;
 import static io.prestosql.operator.aggregation.AggregationMetadata.ParameterMetadata.ParameterType.STATE;
 import static io.prestosql.operator.aggregation.AggregationUtils.generateAggregationName;
-import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.BLOCK_POSITION;
-import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.NEVER_NULL;
-import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
-import static io.prestosql.spi.function.InvocationConvention.simpleConvention;
-import static io.prestosql.spi.function.OperatorType.COMPARISON;
+import static io.prestosql.spi.function.OperatorType.GREATER_THAN;
+import static io.prestosql.spi.function.OperatorType.LESS_THAN;
 import static io.prestosql.util.Failures.internalError;
 import static io.prestosql.util.Reflection.methodHandle;
-import static java.lang.invoke.MethodHandles.filterReturnValue;
 
 public abstract class AbstractMinMaxAggregationFunction
         extends SqlAggregationFunction
@@ -67,7 +63,8 @@ public abstract class AbstractMinMaxAggregationFunction
     private static final MethodHandle LONG_INPUT_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "input", MethodHandle.class, NullableLongState.class, long.class);
     private static final MethodHandle DOUBLE_INPUT_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "input", MethodHandle.class, NullableDoubleState.class, double.class);
     private static final MethodHandle BOOLEAN_INPUT_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "input", MethodHandle.class, NullableBooleanState.class, boolean.class);
-    private static final MethodHandle BLOCK_POSITION_INPUT_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "input", MethodHandle.class, BlockPositionState.class, Block.class, int.class);
+    private static final MethodHandle BLOCK_POSITION_MIN_INPUT_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "minInput", Type.class, BlockPositionState.class, Block.class, int.class);
+    private static final MethodHandle BLOCK_POSITION_MAX_INPUT_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "maxInput", Type.class, BlockPositionState.class, Block.class, int.class);
 
     private static final MethodHandle LONG_OUTPUT_FUNCTION = methodHandle(NullableLongState.class, "write", Type.class, NullableLongState.class, BlockBuilder.class);
     private static final MethodHandle DOUBLE_OUTPUT_FUNCTION = methodHandle(NullableDoubleState.class, "write", Type.class, NullableDoubleState.class, BlockBuilder.class);
@@ -77,12 +74,11 @@ public abstract class AbstractMinMaxAggregationFunction
     private static final MethodHandle LONG_COMBINE_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "combine", MethodHandle.class, NullableLongState.class, NullableLongState.class);
     private static final MethodHandle DOUBLE_COMBINE_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "combine", MethodHandle.class, NullableDoubleState.class, NullableDoubleState.class);
     private static final MethodHandle BOOLEAN_COMBINE_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "combine", MethodHandle.class, NullableBooleanState.class, NullableBooleanState.class);
-    private static final MethodHandle BLOCK_POSITION_COMBINE_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "combine", MethodHandle.class, BlockPositionState.class, BlockPositionState.class);
+    private static final MethodHandle BLOCK_POSITION_MIN_COMBINE_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "minCombine", Type.class, BlockPositionState.class, BlockPositionState.class);
+    private static final MethodHandle BLOCK_POSITION_MAX_COMBINE_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "maxCombine", Type.class, BlockPositionState.class, BlockPositionState.class);
 
-    private static final MethodHandle MIN_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "min", long.class);
-    private static final MethodHandle MAX_FUNCTION = methodHandle(AbstractMinMaxAggregationFunction.class, "max", long.class);
-
-    private final MethodHandle comparisonResultAdapter;
+    private final OperatorType operatorType;
+    private final boolean min;
 
     protected AbstractMinMaxAggregationFunction(String name, boolean min, String description)
     {
@@ -103,14 +99,15 @@ public abstract class AbstractMinMaxAggregationFunction
                         AGGREGATE),
                 true,
                 false);
-        this.comparisonResultAdapter = min ? MIN_FUNCTION : MAX_FUNCTION;
+        this.min = min;
+        this.operatorType = min ? LESS_THAN : GREATER_THAN;
     }
 
     @Override
     public FunctionDependencyDeclaration getFunctionDependencies()
     {
         return FunctionDependencyDeclaration.builder()
-                .addOperatorSignature(COMPARISON, ImmutableList.of(new TypeSignature("E"), new TypeSignature("E")))
+                .addOperatorSignature(operatorType, ImmutableList.of(new TypeSignature("E"), new TypeSignature("E")))
                 .build();
     }
 
@@ -135,15 +132,7 @@ public abstract class AbstractMinMaxAggregationFunction
     public InternalAggregationFunction specialize(FunctionBinding functionBinding, FunctionDependencies functionDependencies)
     {
         Type type = functionBinding.getTypeVariable("E");
-        InvocationConvention invocationConvention;
-        if (type.getJavaType().isPrimitive()) {
-            invocationConvention = simpleConvention(FAIL_ON_NULL, NEVER_NULL, NEVER_NULL);
-        }
-        else {
-            invocationConvention = simpleConvention(FAIL_ON_NULL, BLOCK_POSITION, BLOCK_POSITION);
-        }
-        MethodHandle compareMethodHandle = functionDependencies.getOperatorInvoker(COMPARISON, ImmutableList.of(type, type), Optional.of(invocationConvention)).getMethodHandle();
-        compareMethodHandle = filterReturnValue(compareMethodHandle, comparisonResultAdapter);
+        MethodHandle compareMethodHandle = functionDependencies.getOperatorInvoker(operatorType, ImmutableList.of(type, type), Optional.empty()).getMethodHandle();
         return generateAggregation(type, compareMethodHandle);
     }
 
@@ -184,8 +173,8 @@ public abstract class AbstractMinMaxAggregationFunction
             // native container type is Slice or Block
             stateInterface = BlockPositionState.class;
             stateSerializer = new BlockPositionStateSerializer(type);
-            inputFunction = BLOCK_POSITION_INPUT_FUNCTION.bindTo(compareMethodHandle);
-            combineFunction = BLOCK_POSITION_COMBINE_FUNCTION.bindTo(compareMethodHandle);
+            inputFunction = min ? BLOCK_POSITION_MIN_INPUT_FUNCTION.bindTo(type) : BLOCK_POSITION_MAX_INPUT_FUNCTION.bindTo(type);
+            combineFunction = min ? BLOCK_POSITION_MIN_COMBINE_FUNCTION.bindTo(type) : BLOCK_POSITION_MAX_COMBINE_FUNCTION.bindTo(type);
             outputFunction = BLOCK_POSITION_OUTPUT_FUNCTION.bindTo(type);
         }
 
@@ -244,9 +233,21 @@ public abstract class AbstractMinMaxAggregationFunction
     }
 
     @UsedByGeneratedCode
-    public static void input(MethodHandle methodHandle, BlockPositionState state, Block block, int position)
+    public static void minInput(Type type, BlockPositionState state, Block block, int position)
     {
-        compareAndUpdateState(methodHandle, state, block, position);
+        if (state.getBlock() == null || type.compareTo(block, position, state.getBlock(), state.getPosition()) < 0) {
+            state.setBlock(block);
+            state.setPosition(position);
+        }
+    }
+
+    @UsedByGeneratedCode
+    public static void maxInput(Type type, BlockPositionState state, Block block, int position)
+    {
+        if (state.getBlock() == null || type.compareTo(block, position, state.getBlock(), state.getPosition()) > 0) {
+            state.setBlock(block);
+            state.setPosition(position);
+        }
     }
 
     @UsedByGeneratedCode
@@ -268,9 +269,21 @@ public abstract class AbstractMinMaxAggregationFunction
     }
 
     @UsedByGeneratedCode
-    public static void combine(MethodHandle methodHandle, BlockPositionState state, BlockPositionState otherState)
+    public static void minCombine(Type type, BlockPositionState state, BlockPositionState otherState)
     {
-        compareAndUpdateState(methodHandle, state, otherState.getBlock(), otherState.getPosition());
+        if (state.getBlock() == null || type.compareTo(otherState.getBlock(), otherState.getPosition(), state.getBlock(), state.getPosition()) < 0) {
+            state.setBlock(otherState.getBlock());
+            state.setPosition(otherState.getPosition());
+        }
+    }
+
+    @UsedByGeneratedCode
+    public static void maxCombine(Type type, BlockPositionState state, BlockPositionState otherState)
+    {
+        if (state.getBlock() == null || type.compareTo(otherState.getBlock(), otherState.getPosition(), state.getBlock(), state.getPosition()) > 0) {
+            state.setBlock(otherState.getBlock());
+            state.setPosition(otherState.getPosition());
+        }
     }
 
     private static void compareAndUpdateState(MethodHandle methodHandle, NullableLongState state, long value)
@@ -322,35 +335,5 @@ public abstract class AbstractMinMaxAggregationFunction
         catch (Throwable t) {
             throw internalError(t);
         }
-    }
-
-    private static void compareAndUpdateState(MethodHandle methodHandle, BlockPositionState state, Block block, int position)
-    {
-        if (state.getBlock() == null) {
-            state.setBlock(block);
-            state.setPosition(position);
-            return;
-        }
-        try {
-            if ((boolean) methodHandle.invokeExact(block, position, state.getBlock(), state.getPosition())) {
-                state.setBlock(block);
-                state.setPosition(position);
-            }
-        }
-        catch (Throwable t) {
-            throw internalError(t);
-        }
-    }
-
-    @UsedByGeneratedCode
-    public static boolean min(long comparisonResult)
-    {
-        return comparisonResult < 0;
-    }
-
-    @UsedByGeneratedCode
-    public static boolean max(long comparisonResult)
-    {
-        return comparisonResult > 0;
     }
 }

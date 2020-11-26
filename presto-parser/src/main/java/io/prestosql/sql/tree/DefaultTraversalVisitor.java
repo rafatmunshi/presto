@@ -707,12 +707,4 @@ public abstract class DefaultTraversalVisitor<C>
 
         return null;
     }
-
-    @Override
-    protected Void visitLambdaExpression(LambdaExpression node, C context)
-    {
-        process(node.getBody(), context);
-
-        return null;
-    }
 }

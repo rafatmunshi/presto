@@ -150,10 +150,6 @@ public class Analysis
     private final Map<NodeRef<Expression>, Type> types = new LinkedHashMap<>();
     private final Map<NodeRef<Expression>, Type> coercions = new LinkedHashMap<>();
     private final Set<NodeRef<Expression>> typeOnlyCoercions = new LinkedHashSet<>();
-
-    private final Map<NodeRef<Expression>, Type> sortKeyCoercionsForFrameBoundCalculation = new LinkedHashMap<>();
-    private final Map<NodeRef<Expression>, Type> sortKeyCoercionsForFrameBoundComparison = new LinkedHashMap<>();
-    private final Map<NodeRef<Expression>, ResolvedFunction> frameBoundCalculations = new LinkedHashMap<>();
     private final Map<NodeRef<Relation>, List<Type>> relationCoercions = new LinkedHashMap<>();
     private final Map<NodeRef<FunctionCall>, RoutineEntry> resolvedFunctions = new LinkedHashMap<>();
     private final Map<NodeRef<Identifier>, LambdaArgumentDeclaration> lambdaArgumentReferences = new LinkedHashMap<>();
@@ -572,36 +568,10 @@ public class Analysis
         }
     }
 
-    public void addCoercions(
-            Map<NodeRef<Expression>, Type> coercions,
-            Set<NodeRef<Expression>> typeOnlyCoercions,
-            Map<NodeRef<Expression>, Type> sortKeyCoercionsForFrameBoundCalculation,
-            Map<NodeRef<Expression>, Type> sortKeyCoercionsForFrameBoundComparison)
+    public void addCoercions(Map<NodeRef<Expression>, Type> coercions, Set<NodeRef<Expression>> typeOnlyCoercions)
     {
         this.coercions.putAll(coercions);
         this.typeOnlyCoercions.addAll(typeOnlyCoercions);
-        this.sortKeyCoercionsForFrameBoundCalculation.putAll(sortKeyCoercionsForFrameBoundCalculation);
-        this.sortKeyCoercionsForFrameBoundComparison.putAll(sortKeyCoercionsForFrameBoundComparison);
-    }
-
-    public Type getSortKeyCoercionForFrameBoundCalculation(Expression frameOffset)
-    {
-        return sortKeyCoercionsForFrameBoundCalculation.get(NodeRef.of(frameOffset));
-    }
-
-    public Type getSortKeyCoercionForFrameBoundComparison(Expression frameOffset)
-    {
-        return sortKeyCoercionsForFrameBoundComparison.get(NodeRef.of(frameOffset));
-    }
-
-    public void addFrameBoundCalculations(Map<NodeRef<Expression>, ResolvedFunction> frameBoundCalculations)
-    {
-        this.frameBoundCalculations.putAll(frameBoundCalculations);
-    }
-
-    public ResolvedFunction getFrameBoundCalculation(Expression frameOffset)
-    {
-        return frameBoundCalculations.get(NodeRef.of(frameOffset));
     }
 
     public Expression getHaving(QuerySpecification query)

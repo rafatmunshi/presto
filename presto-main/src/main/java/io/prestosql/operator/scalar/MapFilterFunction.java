@@ -104,11 +104,10 @@ public final class MapFilterFunction
     public ScalarFunctionImplementation specialize(FunctionBinding functionBinding)
     {
         MapType mapType = (MapType) functionBinding.getBoundSignature().getReturnType();
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 ImmutableList.of(NEVER_NULL, FUNCTION),
-                ImmutableList.of(BinaryFunctionInterface.class),
+                ImmutableList.of(Optional.empty(), Optional.of(BinaryFunctionInterface.class)),
                 generateFilter(mapType),
                 Optional.of(STATE_FACTORY.bindTo(mapType)));
     }

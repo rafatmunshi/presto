@@ -25,10 +25,8 @@ import io.prestosql.spi.Page;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.RunLengthEncodedBlock;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.testing.TestingTaskContext;
-import io.prestosql.type.BlockTypeOperators;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -82,8 +80,8 @@ public class TestPartitionedOutputOperator
     @BeforeClass
     public void setUp()
     {
-        executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-executor-%s"));
-        scheduledExecutor = newScheduledThreadPool(1, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+        executor = newCachedThreadPool(daemonThreadsNamed("test-EXECUTOR-%s"));
+        scheduledExecutor = newScheduledThreadPool(1, daemonThreadsNamed("test-%s"));
     }
 
     @AfterClass(alwaysRun = true)
@@ -181,8 +179,7 @@ public class TestPartitionedOutputOperator
 
     private PartitionedOutputOperator createPartitionedOutputOperator(boolean shouldReplicate)
     {
-        BlockTypeOperators blockTypeOperators = new BlockTypeOperators(new TypeOperators());
-        PartitionFunction partitionFunction = new LocalPartitionGenerator(new InterpretedHashGenerator(ImmutableList.of(BIGINT), new int[] {0}, blockTypeOperators), PARTITION_COUNT);
+        PartitionFunction partitionFunction = new LocalPartitionGenerator(new InterpretedHashGenerator(ImmutableList.of(BIGINT), new int[] {0}), PARTITION_COUNT);
         PagesSerdeFactory serdeFactory = new PagesSerdeFactory(createTestMetadataManager().getBlockEncodingSerde(), false);
 
         DriverContext driverContext = TestingTaskContext.builder(executor, scheduledExecutor, TEST_SESSION)

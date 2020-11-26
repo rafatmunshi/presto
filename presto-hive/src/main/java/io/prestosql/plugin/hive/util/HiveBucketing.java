@@ -21,8 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import io.prestosql.plugin.hive.HiveBucketHandle;
 import io.prestosql.plugin.hive.HiveBucketProperty;
 import io.prestosql.plugin.hive.HiveColumnHandle;
-import io.prestosql.plugin.hive.HiveTableHandle;
-import io.prestosql.plugin.hive.HiveTimestampPrecision;
 import io.prestosql.plugin.hive.HiveType;
 import io.prestosql.plugin.hive.metastore.Column;
 import io.prestosql.plugin.hive.metastore.Table;
@@ -185,7 +183,7 @@ public final class HiveBucketing
             return Optional.empty();
         }
 
-        HiveTimestampPrecision timestampPrecision = getTimestampPrecision(session);
+        int timestampPrecision = getTimestampPrecision(session).getPrecision();
         Map<String, HiveColumnHandle> map = getRegularColumnHandles(table, typeManager, timestampPrecision).stream()
                 .collect(Collectors.toMap(HiveColumnHandle::getName, identity()));
 
@@ -205,17 +203,13 @@ public final class HiveBucketing
         return Optional.of(new HiveBucketHandle(bucketColumns.build(), bucketingVersion, bucketCount, bucketCount));
     }
 
-    public static Optional<HiveBucketFilter> getHiveBucketFilter(HiveTableHandle hiveTable, TupleDomain<ColumnHandle> effectivePredicate)
+    public static Optional<HiveBucketFilter> getHiveBucketFilter(Table table, TupleDomain<ColumnHandle> effectivePredicate)
     {
-        if (hiveTable.getBucketHandle().isEmpty()) {
+        if (table.getStorage().getBucketProperty().isEmpty()) {
             return Optional.empty();
         }
 
-        HiveBucketProperty hiveBucketProperty = hiveTable.getBucketHandle().get().toTableBucketProperty();
-        List<Column> dataColumns = hiveTable.getDataColumns().stream()
-                .map(HiveColumnHandle::toMetastoreColumn)
-                .collect(toImmutableList());
-        if (bucketedOnTimestamp(hiveBucketProperty, dataColumns, hiveTable.getTableName())) {
+        if (bucketedOnTimestamp(table.getStorage().getBucketProperty().get(), table)) {
             return Optional.empty();
         }
 
@@ -223,7 +217,7 @@ public final class HiveBucketing
         if (bindings.isEmpty()) {
             return Optional.empty();
         }
-        Optional<Set<Integer>> buckets = getHiveBuckets(hiveBucketProperty, dataColumns, bindings.get());
+        Optional<Set<Integer>> buckets = getHiveBuckets(table, bindings.get());
         if (buckets.isPresent()) {
             return Optional.of(new HiveBucketFilter(buckets.get()));
         }
@@ -238,7 +232,7 @@ public final class HiveBucketing
         }
         ValueSet values = domain.get().getValues();
         ImmutableSet.Builder<Integer> builder = ImmutableSet.builder();
-        int bucketCount = hiveBucketProperty.getBucketCount();
+        int bucketCount = table.getStorage().getBucketProperty().get().getBucketCount();
         for (int i = 0; i < bucketCount; i++) {
             if (values.containsValue((long) i)) {
                 builder.add(i);
@@ -247,18 +241,18 @@ public final class HiveBucketing
         return Optional.of(new HiveBucketFilter(builder.build()));
     }
 
-    private static Optional<Set<Integer>> getHiveBuckets(HiveBucketProperty hiveBucketProperty, List<Column> dataColumns, Map<ColumnHandle, List<NullableValue>> bindings)
+    private static Optional<Set<Integer>> getHiveBuckets(Table table, Map<ColumnHandle, List<NullableValue>> bindings)
     {
         if (bindings.isEmpty()) {
             return Optional.empty();
         }
 
         // Get bucket columns names
-        List<String> bucketColumns = hiveBucketProperty.getBucketedBy();
+        List<String> bucketColumns = table.getStorage().getBucketProperty().get().getBucketedBy();
 
         // Verify the bucket column types are supported
         Map<String, HiveType> hiveTypes = new HashMap<>();
-        for (Column column : dataColumns) {
+        for (Column column : table.getDataColumns()) {
             hiveTypes.put(column.getName(), column.getType());
         }
         for (String column : bucketColumns) {
@@ -292,8 +286,8 @@ public final class HiveBucketing
                 .collect(toImmutableList());
 
         return getHiveBuckets(
-                hiveBucketProperty.getBucketingVersion(),
-                hiveBucketProperty.getBucketCount(),
+                getBucketingVersion(table.getParameters()),
+                table.getStorage().getBucketProperty().get().getBucketCount(),
                 typeInfos,
                 orderedBindings);
     }
@@ -314,14 +308,9 @@ public final class HiveBucketing
 
     public static boolean bucketedOnTimestamp(HiveBucketProperty bucketProperty, Table table)
     {
-        return bucketedOnTimestamp(bucketProperty, table.getDataColumns(), table.getTableName());
-    }
-
-    public static boolean bucketedOnTimestamp(HiveBucketProperty bucketProperty, List<Column> dataColumns, String tableName)
-    {
         return bucketProperty.getBucketedBy().stream()
-                .map(columnName -> dataColumns.stream().filter(column -> column.getName().equals(columnName)).findFirst()
-                        .orElseThrow(() -> new IllegalArgumentException(format("Cannot find column '%s' in %s", columnName, tableName))))
+                .map(columnName -> table.getColumn(columnName)
+                        .orElseThrow(() -> new IllegalArgumentException(format("Cannot find column '%s' in %s", columnName, table))))
                 .map(Column::getType)
                 .map(HiveType::getTypeInfo)
                 .anyMatch(HiveBucketing::bucketedOnTimestamp);

@@ -28,7 +28,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -48,7 +47,6 @@ public class Table
     private final Map<String, String> parameters;
     private final Optional<String> viewOriginalText;
     private final Optional<String> viewExpandedText;
-    private final OptionalLong writeId;
 
     @JsonCreator
     public Table(
@@ -61,8 +59,7 @@ public class Table
             @JsonProperty("partitionColumns") List<Column> partitionColumns,
             @JsonProperty("parameters") Map<String, String> parameters,
             @JsonProperty("viewOriginalText") Optional<String> viewOriginalText,
-            @JsonProperty("viewExpandedText") Optional<String> viewExpandedText,
-            @JsonProperty("writeId") OptionalLong writeId)
+            @JsonProperty("viewExpandedText") Optional<String> viewExpandedText)
     {
         this.databaseName = requireNonNull(databaseName, "databaseName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -74,7 +71,6 @@ public class Table
         this.parameters = ImmutableMap.copyOf(requireNonNull(parameters, "parameters is null"));
         this.viewOriginalText = requireNonNull(viewOriginalText, "viewOriginalText is null");
         this.viewExpandedText = requireNonNull(viewExpandedText, "viewExpandedText is null");
-        this.writeId = requireNonNull(writeId, "writeId is null");
     }
 
     @JsonProperty
@@ -148,12 +144,6 @@ public class Table
     public Optional<String> getViewExpandedText()
     {
         return viewExpandedText;
-    }
-
-    @JsonProperty
-    public OptionalLong getWriteId()
-    {
-        return writeId;
     }
 
     public static Builder builder()
@@ -234,7 +224,6 @@ public class Table
         private Map<String, String> parameters = new LinkedHashMap<>();
         private Optional<String> viewOriginalText = Optional.empty();
         private Optional<String> viewExpandedText = Optional.empty();
-        private OptionalLong writeId = OptionalLong.empty();
 
         private Builder()
         {
@@ -253,7 +242,6 @@ public class Table
             parameters = new LinkedHashMap<>(table.parameters);
             viewOriginalText = table.viewOriginalText;
             viewExpandedText = table.viewExpandedText;
-            writeId = table.writeId;
         }
 
         public Builder setDatabaseName(String databaseName)
@@ -327,12 +315,6 @@ public class Table
             return this;
         }
 
-        public Builder setWriteId(OptionalLong writeId)
-        {
-            this.writeId = writeId;
-            return this;
-        }
-
         public Builder withStorage(Consumer<Storage.Builder> consumer)
         {
             consumer.accept(storageBuilder);
@@ -351,8 +333,7 @@ public class Table
                     partitionColumns,
                     parameters,
                     viewOriginalText,
-                    viewExpandedText,
-                    writeId);
+                    viewExpandedText);
         }
     }
 }

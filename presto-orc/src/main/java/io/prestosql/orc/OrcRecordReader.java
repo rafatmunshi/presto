@@ -86,7 +86,6 @@ public class OrcRecordReader
     private final long totalRowCount;
     private final long splitLength;
     private final long maxBlockBytes;
-    private final ColumnMetadata<OrcType> orcTypes;
     private long currentPosition;
     private long currentStripePosition;
     private int currentBatchSize;
@@ -156,7 +155,7 @@ public class OrcRecordReader
         requireNonNull(fileStripes, "fileStripes is null");
         requireNonNull(stripeStats, "stripeStats is null");
         requireNonNull(orcDataSource, "orcDataSource is null");
-        this.orcTypes = requireNonNull(orcTypes, "types is null");
+        requireNonNull(orcTypes, "types is null");
         requireNonNull(decompressor, "decompressor is null");
         requireNonNull(legacyFileTimeZone, "legacyFileTimeZone is null");
         requireNonNull(userMetadata, "userMetadata is null");
@@ -229,7 +228,7 @@ public class OrcRecordReader
 
         stripeReader = new StripeReader(
                 orcDataSource,
-                ZoneId.of(legacyFileTimeZone.getID()),
+                legacyFileTimeZone.toTimeZone().toZoneId(),
                 decompressor,
                 orcTypes,
                 ImmutableSet.copyOf(readColumns),
@@ -327,11 +326,6 @@ public class OrcRecordReader
     public long getMaxCombinedBytesPerRow()
     {
         return maxCombinedBytesPerRow;
-    }
-
-    public ColumnMetadata<OrcType> getColumnTypes()
-    {
-        return orcTypes;
     }
 
     @Override

@@ -14,6 +14,7 @@
 package io.prestosql.tests.product.launcher.env;
 
 import com.google.inject.Binder;
+import com.google.inject.Inject;
 import com.google.inject.Module;
 import com.google.inject.Provides;
 import com.google.inject.Singleton;
@@ -68,6 +69,7 @@ public final class EnvironmentModule
         binder.install(additionalEnvironments);
     }
 
+    @Inject
     @Provides
     @Singleton
     public EnvironmentConfig provideEnvironmentConfig(EnvironmentOptions options, EnvironmentConfigFactory factory)
@@ -77,18 +79,11 @@ public final class EnvironmentModule
 
     @Provides
     @Singleton
+    @Inject
     @ServerPackage
     public File provideServerPackage(EnvironmentOptions options)
     {
         // fallback to dummy - nonNull to prevent injection errors when listing environments
         return requireNonNullElse(options.serverPackage, new File("dummy.tar.gz"));
-    }
-
-    @Provides
-    @Singleton
-    @Debug
-    public boolean provideDebug(EnvironmentOptions options)
-    {
-        return options.debug;
     }
 }

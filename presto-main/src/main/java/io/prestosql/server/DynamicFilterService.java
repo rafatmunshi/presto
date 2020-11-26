@@ -21,14 +21,10 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.inject.Inject;
-import io.airlift.units.Duration;
 import io.prestosql.Session;
-import io.prestosql.execution.DynamicFilterConfig;
 import io.prestosql.execution.SqlQueryExecution;
 import io.prestosql.execution.StageId;
 import io.prestosql.execution.TaskId;
-import io.prestosql.metadata.Metadata;
 import io.prestosql.operator.JoinUtils;
 import io.prestosql.spi.QueryId;
 import io.prestosql.spi.connector.ColumnHandle;
@@ -37,13 +33,10 @@ import io.prestosql.spi.predicate.DiscreteValues;
 import io.prestosql.spi.predicate.Domain;
 import io.prestosql.spi.predicate.Ranges;
 import io.prestosql.spi.predicate.TupleDomain;
-import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.DynamicFilters;
 import io.prestosql.sql.planner.PlanFragment;
 import io.prestosql.sql.planner.SubPlan;
 import io.prestosql.sql.planner.Symbol;
-import io.prestosql.sql.planner.TypeProvider;
 import io.prestosql.sql.planner.optimizations.PlanNodeSearcher;
 import io.prestosql.sql.planner.plan.DynamicFilterId;
 import io.prestosql.sql.planner.plan.JoinNode;
@@ -53,7 +46,6 @@ import io.prestosql.sql.planner.plan.SemiJoinNode;
 import javax.annotation.PreDestroy;
 import javax.annotation.concurrent.ThreadSafe;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -68,6 +60,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.google.common.base.Functions.identity;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.google.common.collect.ImmutableListMultimap.toImmutableListMultimap;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static com.google.common.collect.Sets.difference;
@@ -78,41 +71,29 @@ import static io.airlift.concurrent.MoreFutures.toCompletableFuture;
 import static io.airlift.concurrent.MoreFutures.unmodifiableFuture;
 import static io.airlift.concurrent.MoreFutures.whenAnyComplete;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
-import static io.airlift.units.Duration.succinctNanos;
 import static io.prestosql.spi.connector.DynamicFilter.EMPTY;
 import static io.prestosql.spi.predicate.Domain.union;
 import static io.prestosql.sql.DynamicFilters.extractDynamicFilters;
-import static io.prestosql.sql.DynamicFilters.extractSourceSymbols;
-import static io.prestosql.sql.planner.DomainCoercer.applySaturatedCasts;
 import static io.prestosql.sql.planner.ExpressionExtractor.extractExpressions;
 import static io.prestosql.sql.planner.SystemPartitioningHandle.SOURCE_DISTRIBUTION;
 import static io.prestosql.util.MorePredicates.isInstanceOfAny;
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
-import static java.util.concurrent.Executors.newFixedThreadPool;
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
 
 @ThreadSafe
 public class DynamicFilterService
 {
-    private final Metadata metadata;
-    private final TypeOperators typeOperators;
     private final ExecutorService executor;
     private final Map<QueryId, DynamicFilterContext> dynamicFilterContexts = new ConcurrentHashMap<>();
 
-    @Inject
-    public DynamicFilterService(Metadata metadata, TypeOperators typeOperators, DynamicFilterConfig dynamicFilterConfig)
+    public DynamicFilterService()
     {
-        this(
-                metadata,
-                typeOperators,
-                newFixedThreadPool(dynamicFilterConfig.getServiceThreadCount(), daemonThreadsNamed("DynamicFilterService")));
+        this(newSingleThreadExecutor(daemonThreadsNamed("DynamicFilterService")));
     }
 
     @VisibleForTesting
-    public DynamicFilterService(Metadata metadata, TypeOperators typeOperators, ExecutorService executor)
+    public DynamicFilterService(ExecutorService executor)
     {
-        this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
         this.executor = requireNonNull(executor, "executor is null");
     }
 
@@ -136,7 +117,6 @@ public class DynamicFilterService
         if (!dynamicFilters.isEmpty()) {
             registerQuery(
                     sqlQueryExecution.getQueryId(),
-                    sqlQueryExecution.getSession(),
                     dynamicFilters,
                     lazyDynamicFilters,
                     replicatedDynamicFilters);
@@ -146,7 +126,6 @@ public class DynamicFilterService
     @VisibleForTesting
     public void registerQuery(
             QueryId queryId,
-            Session session,
             Set<DynamicFilterId> dynamicFilters,
             Set<DynamicFilterId> lazyDynamicFilters,
             Set<DynamicFilterId> replicatedDynamicFilters)
@@ -154,7 +133,6 @@ public class DynamicFilterService
         Map<DynamicFilterId, SettableFuture<?>> lazyDynamicFilterFutures = lazyDynamicFilters.stream()
                 .collect(toImmutableMap(filter -> filter, filter -> SettableFuture.create()));
         dynamicFilterContexts.putIfAbsent(queryId, new DynamicFilterContext(
-                session,
                 dynamicFilters,
                 lazyDynamicFilterFutures,
                 replicatedDynamicFilters));
@@ -186,12 +164,7 @@ public class DynamicFilterService
                             ranges -> 0,
                             DiscreteValues::getValuesCount,
                             allOrNone -> 0);
-                    return new DynamicFilterDomainStats(
-                            dynamicFilterId,
-                            simplifiedDomain,
-                            rangeCount,
-                            discreteValuesCount,
-                            context.getDynamicFilterCollectionDuration(dynamicFilterId));
+                    return new DynamicFilterDomainStats(dynamicFilterId, simplifiedDomain, rangeCount, discreteValuesCount);
                 })
                 .collect(toImmutableList());
         return new DynamicFiltersStats(
@@ -242,14 +215,12 @@ public class DynamicFilterService
                 requireNonNull(context.getLazyDynamicFilters().get(filter), "Future not found").set(null));
     }
 
-    public DynamicFilter createDynamicFilter(
-            QueryId queryId,
-            List<DynamicFilters.Descriptor> dynamicFilterDescriptors,
-            Map<Symbol, ColumnHandle> columnHandles,
-            TypeProvider typeProvider)
+    public DynamicFilter createDynamicFilter(QueryId queryId, List<DynamicFilters.Descriptor> dynamicFilterDescriptors, Map<Symbol, ColumnHandle> columnHandles)
     {
-        Multimap<DynamicFilterId, DynamicFilters.Descriptor> symbolsMap = extractSourceSymbols(dynamicFilterDescriptors);
-        Set<DynamicFilterId> dynamicFilters = ImmutableSet.copyOf(symbolsMap.keySet());
+        Multimap<DynamicFilterId, ColumnHandle> sourceColumnHandles = extractSourceColumnHandles(dynamicFilterDescriptors, columnHandles);
+        Set<DynamicFilterId> dynamicFilters = dynamicFilterDescriptors.stream()
+                .map(DynamicFilters.Descriptor::getId)
+                .collect(toImmutableSet());
         DynamicFilterContext context = dynamicFilterContexts.get(queryId);
         if (context == null) {
             // query has been removed
@@ -307,7 +278,7 @@ public class DynamicFilterService
                 }
 
                 TupleDomain<ColumnHandle> dynamicFilter = completedDynamicFilters.stream()
-                        .map(filter -> translateSummaryToTupleDomain(filter, context, symbolsMap, columnHandles, typeProvider))
+                        .map(filter -> translateSummaryToTupleDomain(filter, context.getDynamicFilterSummaries().get(filter), sourceColumnHandles))
                         .reduce(TupleDomain.all(), TupleDomain::intersect);
 
                 // It could happen that two threads update currentDynamicFilter concurrently.
@@ -382,30 +353,20 @@ public class DynamicFilterService
         return Optional.ofNullable(dynamicFilterContexts.get(queryId).getDynamicFilterSummaries().get(filterId));
     }
 
-    private TupleDomain<ColumnHandle> translateSummaryToTupleDomain(
-            DynamicFilterId filterId,
-            DynamicFilterContext dynamicFilterContext,
-            Multimap<DynamicFilterId, DynamicFilters.Descriptor> descriptorMultimap,
-            Map<Symbol, ColumnHandle> columnHandles,
-            TypeProvider typeProvider)
+    private static TupleDomain<ColumnHandle> translateSummaryToTupleDomain(DynamicFilterId filterId, Domain summary, Multimap<DynamicFilterId, ColumnHandle> sourceColumnHandles)
     {
-        Collection<DynamicFilters.Descriptor> descriptors = descriptorMultimap.get(filterId);
-        checkState(descriptors != null, "No descriptors for dynamic filter %s", filterId);
-        Domain summary = dynamicFilterContext.getDynamicFilterSummaries().get(filterId);
-        return TupleDomain.withColumnDomains(descriptors.stream()
-                .collect(toImmutableMap(
-                        descriptor -> {
-                            Symbol probeSymbol = Symbol.from(descriptor.getInput());
-                            return requireNonNull(columnHandles.get(probeSymbol), () -> format("Missing probe column for %s", probeSymbol));
-                        },
-                        descriptor -> {
-                            Type targetType = typeProvider.get(Symbol.from(descriptor.getInput()));
-                            Domain updatedSummary = descriptor.applyComparison(summary);
-                            if (!updatedSummary.getType().equals(targetType)) {
-                                return applySaturatedCasts(metadata, typeOperators, dynamicFilterContext.getSession(), updatedSummary, targetType);
-                            }
-                            return updatedSummary;
-                        })));
+        checkState(sourceColumnHandles.containsKey(filterId), "No source column handles for dynamic filter %s", filterId);
+        return TupleDomain.withColumnDomains(
+                sourceColumnHandles.get(filterId).stream()
+                        .collect(toImmutableMap(handle -> handle, handle -> summary)));
+    }
+
+    private static Multimap<DynamicFilterId, ColumnHandle> extractSourceColumnHandles(List<DynamicFilters.Descriptor> dynamicFilters, Map<Symbol, ColumnHandle> columnHandles)
+    {
+        return dynamicFilters.stream()
+                .collect(toImmutableListMultimap(
+                        DynamicFilters.Descriptor::getId,
+                        descriptor -> columnHandles.get(Symbol.from(descriptor.getInput()))));
     }
 
     private static Set<DynamicFilterId> getLazyDynamicFilters(PlanFragment plan)
@@ -439,7 +400,7 @@ public class DynamicFilterService
         return PlanNodeSearcher.searchFrom(planNode)
                 .where(isInstanceOfAny(JoinNode.class, SemiJoinNode.class))
                 .findAll().stream()
-                .filter(JoinUtils::isBuildSideReplicated)
+                .filter((JoinUtils::isBuildSideReplicated))
                 .flatMap(node -> getDynamicFiltersProducedInPlanNode(node).stream())
                 .collect(toImmutableSet());
     }
@@ -490,7 +451,7 @@ public class DynamicFilterService
                 @JsonProperty("totalDynamicFilters") int totalDynamicFilters,
                 @JsonProperty("dynamicFiltersCompleted") int dynamicFiltersCompleted)
         {
-            this.dynamicFilterDomainStats = requireNonNull(dynamicFilterDomainStats, "dynamicFilterDomainStats is null");
+            this.dynamicFilterDomainStats = dynamicFilterDomainStats;
             this.lazyDynamicFilters = lazyDynamicFilters;
             this.replicatedDynamicFilters = replicatedDynamicFilters;
             this.totalDynamicFilters = totalDynamicFilters;
@@ -557,31 +518,18 @@ public class DynamicFilterService
         private final String simplifiedDomain;
         private final int rangeCount;
         private final int discreteValuesCount;
-        private final Optional<Duration> collectionDuration;
-
-        @VisibleForTesting
-        DynamicFilterDomainStats(
-                DynamicFilterId dynamicFilterId,
-                String simplifiedDomain,
-                int rangeCount,
-                int discreteValuesCount)
-        {
-            this(dynamicFilterId, simplifiedDomain, rangeCount, discreteValuesCount, Optional.empty());
-        }
 
         @JsonCreator
         public DynamicFilterDomainStats(
                 @JsonProperty("dynamicFilterId") DynamicFilterId dynamicFilterId,
                 @JsonProperty("simplifiedDomain") String simplifiedDomain,
                 @JsonProperty("rangeCount") int rangeCount,
-                @JsonProperty("discreteValuesCount") int discreteValuesCount,
-                @JsonProperty("collectionDuration") Optional<Duration> collectionDuration)
+                @JsonProperty("discreteValuesCount") int discreteValuesCount)
         {
-            this.dynamicFilterId = requireNonNull(dynamicFilterId, "dynamicFilterId is null");
-            this.simplifiedDomain = requireNonNull(simplifiedDomain, "simplifiedDomain is null");
+            this.dynamicFilterId = dynamicFilterId;
+            this.simplifiedDomain = simplifiedDomain;
             this.rangeCount = rangeCount;
             this.discreteValuesCount = discreteValuesCount;
-            this.collectionDuration = requireNonNull(collectionDuration, "collectionDuration is null");
         }
 
         @JsonProperty
@@ -606,12 +554,6 @@ public class DynamicFilterService
         public int getDiscreteValuesCount()
         {
             return discreteValuesCount;
-        }
-
-        @JsonProperty
-        public Optional<Duration> getCollectionDuration()
-        {
-            return collectionDuration;
         }
 
         @Override
@@ -645,9 +587,7 @@ public class DynamicFilterService
      */
     private static class DynamicFilterContext
     {
-        private final Session session;
         private final Map<DynamicFilterId, Domain> dynamicFilterSummaries = new ConcurrentHashMap<>();
-        private final Map<DynamicFilterId, Long> dynamicFilterCollectionTime = new ConcurrentHashMap<>();
         private final Set<DynamicFilterId> dynamicFilters;
         private final Map<DynamicFilterId, SettableFuture<?>> lazyDynamicFilters;
         private final Set<DynamicFilterId> replicatedDynamicFilters;
@@ -656,24 +596,16 @@ public class DynamicFilterService
         // when map value for given filter id is empty it means that dynamic filter has already been collected
         // and no partial task domains are required
         private final Map<DynamicFilterId, Map<TaskId, Domain>> taskDynamicFilters = new ConcurrentHashMap<>();
-        private final long queryStartTime = System.nanoTime();
 
         private DynamicFilterContext(
-                Session session,
                 Set<DynamicFilterId> dynamicFilters,
                 Map<DynamicFilterId, SettableFuture<?>> lazyDynamicFilters,
                 Set<DynamicFilterId> replicatedDynamicFilters)
         {
-            this.session = requireNonNull(session, "session is null");
             this.dynamicFilters = requireNonNull(dynamicFilters, "dynamicFilters is null");
             this.lazyDynamicFilters = requireNonNull(lazyDynamicFilters, "lazyDynamicFilters is null");
             this.replicatedDynamicFilters = requireNonNull(replicatedDynamicFilters, "replicatedDynamicFilters is null");
             dynamicFilters.forEach(filter -> taskDynamicFilters.put(filter, new ConcurrentHashMap<>()));
-        }
-
-        public Session getSession()
-        {
-            return session;
         }
 
         private int getTotalDynamicFilters()
@@ -708,7 +640,6 @@ public class DynamicFilterService
                 }
                 dynamicFilterSummaries.put(filter, union(domain));
                 Optional.ofNullable(lazyDynamicFilters.get(filter)).ifPresent(future -> future.set(null));
-                dynamicFilterCollectionTime.put(filter, System.nanoTime());
             });
         }
 
@@ -725,8 +656,7 @@ public class DynamicFilterService
                 // Narrowing down of task dynamic filter is not supported.
                 // Currently, task dynamic filters are derived from join and semi-join,
                 // which produce just a single version of dynamic filter.
-                Domain previousDomain = taskDomains.put(taskId, domain);
-                checkState(previousDomain == null || domain.equals(previousDomain), "Different task domains were set");
+                checkState(taskDomains.put(taskId, domain) == null, "Task dynamic filter is set twice");
             });
         }
 
@@ -748,16 +678,6 @@ public class DynamicFilterService
         private Set<DynamicFilterId> getReplicatedDynamicFilters()
         {
             return replicatedDynamicFilters;
-        }
-
-        private Optional<Duration> getDynamicFilterCollectionDuration(DynamicFilterId filterId)
-        {
-            Long filterCollectionTime = dynamicFilterCollectionTime.get(filterId);
-            if (filterCollectionTime == null) {
-                return Optional.empty();
-            }
-
-            return Optional.of(succinctNanos(filterCollectionTime - queryStartTime));
         }
     }
 

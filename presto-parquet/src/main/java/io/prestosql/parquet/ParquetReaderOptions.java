@@ -24,34 +24,35 @@ public class ParquetReaderOptions
     private static final DataSize DEFAULT_MAX_MERGE_DISTANCE = DataSize.of(1, MEGABYTE);
     private static final DataSize DEFAULT_MAX_BUFFER_SIZE = DataSize.of(8, MEGABYTE);
 
-    private final boolean ignoreStatistics;
+    private final boolean failOnCorruptedStatistics; // TODO remove, this can mask correctness issues
     private final DataSize maxReadBlockSize;
     private final DataSize maxMergeDistance;
     private final DataSize maxBufferSize;
 
     public ParquetReaderOptions()
     {
-        ignoreStatistics = false;
+        failOnCorruptedStatistics = true;
         maxReadBlockSize = DEFAULT_MAX_READ_BLOCK_SIZE;
         maxMergeDistance = DEFAULT_MAX_MERGE_DISTANCE;
         maxBufferSize = DEFAULT_MAX_BUFFER_SIZE;
     }
 
     private ParquetReaderOptions(
-            boolean ignoreStatistics,
+            boolean failOnCorruptedStatistics,
             DataSize maxReadBlockSize,
             DataSize maxMergeDistance,
             DataSize maxBufferSize)
     {
-        this.ignoreStatistics = ignoreStatistics;
+        this.failOnCorruptedStatistics = failOnCorruptedStatistics;
         this.maxReadBlockSize = requireNonNull(maxReadBlockSize, "maxMergeDistance is null");
         this.maxMergeDistance = requireNonNull(maxMergeDistance, "maxMergeDistance is null");
         this.maxBufferSize = requireNonNull(maxBufferSize, "maxBufferSize is null");
     }
 
-    public boolean isIgnoreStatistics()
+    @Deprecated
+    public boolean isFailOnCorruptedStatistics()
     {
-        return ignoreStatistics;
+        return failOnCorruptedStatistics;
     }
 
     public DataSize getMaxReadBlockSize()
@@ -69,10 +70,10 @@ public class ParquetReaderOptions
         return maxBufferSize;
     }
 
-    public ParquetReaderOptions withIgnoreStatistics(boolean ignoreStatistics)
+    public ParquetReaderOptions withFailOnCorruptedStatistics(boolean failOnCorruptedStatistics)
     {
         return new ParquetReaderOptions(
-                ignoreStatistics,
+                failOnCorruptedStatistics,
                 maxReadBlockSize,
                 maxMergeDistance,
                 maxBufferSize);
@@ -81,7 +82,7 @@ public class ParquetReaderOptions
     public ParquetReaderOptions withMaxReadBlockSize(DataSize maxReadBlockSize)
     {
         return new ParquetReaderOptions(
-                ignoreStatistics,
+                failOnCorruptedStatistics,
                 maxReadBlockSize,
                 maxMergeDistance,
                 maxBufferSize);
@@ -90,7 +91,7 @@ public class ParquetReaderOptions
     public ParquetReaderOptions withMaxMergeDistance(DataSize maxMergeDistance)
     {
         return new ParquetReaderOptions(
-                ignoreStatistics,
+                failOnCorruptedStatistics,
                 maxReadBlockSize,
                 maxMergeDistance,
                 maxBufferSize);
@@ -99,7 +100,7 @@ public class ParquetReaderOptions
     public ParquetReaderOptions withMaxBufferSize(DataSize maxBufferSize)
     {
         return new ParquetReaderOptions(
-                ignoreStatistics,
+                failOnCorruptedStatistics,
                 maxReadBlockSize,
                 maxMergeDistance,
                 maxBufferSize);

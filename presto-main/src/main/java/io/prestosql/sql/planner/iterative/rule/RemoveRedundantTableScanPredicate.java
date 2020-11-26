@@ -24,7 +24,6 @@ import io.prestosql.metadata.Metadata;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.predicate.Domain;
 import io.prestosql.spi.predicate.TupleDomain;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.DomainTranslator;
 import io.prestosql.sql.planner.PlanNodeIdAllocator;
 import io.prestosql.sql.planner.Symbol;
@@ -61,12 +60,10 @@ public class RemoveRedundantTableScanPredicate
 
     private final Metadata metadata;
     private final DomainTranslator domainTranslator;
-    private final TypeOperators typeOperators;
 
-    public RemoveRedundantTableScanPredicate(Metadata metadata, TypeOperators typeOperators)
+    public RemoveRedundantTableScanPredicate(Metadata metadata)
     {
         this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
         this.domainTranslator = new DomainTranslator(metadata);
     }
 
@@ -86,8 +83,7 @@ public class RemoveRedundantTableScanPredicate
                 filterNode.getPredicate(),
                 context.getSession(),
                 context.getSymbolAllocator().getTypes(),
-                context.getIdAllocator(),
-                typeOperators);
+                context.getIdAllocator());
 
         if (rewritten instanceof FilterNode
                 && Objects.equals(((FilterNode) rewritten).getPredicate(), filterNode.getPredicate())) {
@@ -102,15 +98,13 @@ public class RemoveRedundantTableScanPredicate
             Expression predicate,
             Session session,
             TypeProvider types,
-            PlanNodeIdAllocator idAllocator,
-            TypeOperators typeOperators)
+            PlanNodeIdAllocator idAllocator)
     {
         Expression deterministicPredicate = filterDeterministicConjuncts(metadata, predicate);
         Expression nonDeterministicPredicate = filterNonDeterministicConjuncts(metadata, predicate);
 
         DomainTranslator.ExtractionResult decomposedPredicate = DomainTranslator.fromPredicate(
                 metadata,
-                typeOperators,
                 session,
                 deterministicPredicate,
                 types);

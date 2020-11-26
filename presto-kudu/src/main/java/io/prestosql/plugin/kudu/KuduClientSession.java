@@ -201,7 +201,6 @@ public class KuduClientSession
         }
 
         builder.setProjectedColumnIndexes(columnIndexes);
-        tableHandle.getLimit().ifPresent(builder::limit);
 
         List<KuduScanToken> tokens = builder.build();
         ImmutableList.Builder<KuduSplit> tokenBuilder = ImmutableList.builder();
@@ -386,7 +385,7 @@ public class KuduClientSession
     {
         List<ColumnSchema> kuduColumns = columns.stream()
                 .map(this::toColumnSchema)
-                .collect(toImmutableList());
+                .collect(ImmutableList.toImmutableList());
         return new Schema(kuduColumns);
     }
 

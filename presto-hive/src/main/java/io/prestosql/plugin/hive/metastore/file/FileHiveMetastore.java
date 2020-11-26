@@ -32,7 +32,6 @@ import io.prestosql.plugin.hive.PartitionNotFoundException;
 import io.prestosql.plugin.hive.PartitionStatistics;
 import io.prestosql.plugin.hive.SchemaAlreadyExistsException;
 import io.prestosql.plugin.hive.TableAlreadyExistsException;
-import io.prestosql.plugin.hive.acid.AcidTransaction;
 import io.prestosql.plugin.hive.authentication.HiveIdentity;
 import io.prestosql.plugin.hive.authentication.NoHdfsAuthentication;
 import io.prestosql.plugin.hive.metastore.Column;
@@ -41,7 +40,6 @@ import io.prestosql.plugin.hive.metastore.HiveColumnStatistics;
 import io.prestosql.plugin.hive.metastore.HiveMetastore;
 import io.prestosql.plugin.hive.metastore.HivePrincipal;
 import io.prestosql.plugin.hive.metastore.HivePrivilegeInfo;
-import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.Partition;
 import io.prestosql.plugin.hive.metastore.PartitionWithStatistics;
 import io.prestosql.plugin.hive.metastore.PrincipalPrivileges;
@@ -63,7 +61,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.TableType;
 
-import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
@@ -87,7 +84,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -96,8 +92,6 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static io.prestosql.plugin.hive.HiveErrorCode.HIVE_METASTORE_ERROR;
-import static io.prestosql.plugin.hive.HiveMetadata.DELTA_LAKE_PROVIDER;
-import static io.prestosql.plugin.hive.HiveMetadata.SPARK_TABLE_PROVIDER_KEY;
 import static io.prestosql.plugin.hive.HiveMetadata.TABLE_COMMENT;
 import static io.prestosql.plugin.hive.HivePartitionManager.extractPartitionValues;
 import static io.prestosql.plugin.hive.metastore.HivePrivilegeInfo.HivePrivilege.OWNERSHIP;
@@ -106,6 +100,7 @@ import static io.prestosql.plugin.hive.metastore.MetastoreUtil.partitionKeyFilte
 import static io.prestosql.plugin.hive.metastore.MetastoreUtil.verifyCanDropColumn;
 import static io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreUtil.getHiveBasicStatistics;
 import static io.prestosql.plugin.hive.metastore.thrift.ThriftMetastoreUtil.updateStatisticsParameters;
+import static io.prestosql.plugin.hive.util.HiveUtil.PRESTO_VIEW_FLAG;
 import static io.prestosql.plugin.hive.util.HiveUtil.toPartitionValues;
 import static io.prestosql.spi.StandardErrorCode.ALREADY_EXISTS;
 import static io.prestosql.spi.StandardErrorCode.NOT_SUPPORTED;
@@ -136,7 +131,6 @@ public class FileHiveMetastore
     private final Path catalogDirectory;
     private final HdfsContext hdfsContext;
     private final boolean assumeCanonicalPartitionKeys;
-    private final boolean hideDeltaLakeTables;
     private final FileSystem metadataFileSystem;
 
     private final JsonCodec<DatabaseMetadata> databaseCodec = JsonCodec.jsonCodec(DatabaseMetadata.class);
@@ -150,26 +144,24 @@ public class FileHiveMetastore
     public static FileHiveMetastore createTestingFileHiveMetastore(File catalogDirectory)
     {
         HdfsConfig hdfsConfig = new HdfsConfig();
+        FileHiveMetastoreConfig metastoreConfig = new FileHiveMetastoreConfig();
         HdfsConfiguration hdfsConfiguration = new HiveHdfsConfiguration(new HdfsConfigurationInitializer(hdfsConfig), ImmutableSet.of());
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(hdfsConfiguration, hdfsConfig, new NoHdfsAuthentication());
-        return new FileHiveMetastore(
-                hdfsEnvironment,
-                new MetastoreConfig(),
-                new FileHiveMetastoreConfig()
-                        .setCatalogDirectory(catalogDirectory.toURI().toString())
-                        .setMetastoreUser("test"));
+        return new FileHiveMetastore(hdfsEnvironment, catalogDirectory.toURI().toString(), "test", metastoreConfig.isAssumeCanonicalPartitionKeys());
     }
 
     @Inject
-    public FileHiveMetastore(HdfsEnvironment hdfsEnvironment, MetastoreConfig metastoreConfig, FileHiveMetastoreConfig config)
+    public FileHiveMetastore(HdfsEnvironment hdfsEnvironment, FileHiveMetastoreConfig config)
+    {
+        this(hdfsEnvironment, config.getCatalogDirectory(), config.getMetastoreUser(), config.isAssumeCanonicalPartitionKeys());
+    }
+
+    public FileHiveMetastore(HdfsEnvironment hdfsEnvironment, String catalogDirectory, String metastoreUser, boolean assumeCanonicalPartitionKeys)
     {
         this.hdfsEnvironment = requireNonNull(hdfsEnvironment, "hdfsEnvironment is null");
-        requireNonNull(metastoreConfig, "metastoreConfig is null");
-        requireNonNull(config, "config is null");
-        this.catalogDirectory = new Path(requireNonNull(config.getCatalogDirectory(), "catalogDirectory is null"));
-        this.hdfsContext = new HdfsContext(ConnectorIdentity.ofUser(config.getMetastoreUser()));
-        this.assumeCanonicalPartitionKeys = config.isAssumeCanonicalPartitionKeys();
-        this.hideDeltaLakeTables = metastoreConfig.isHideDeltaLakeTables();
+        this.catalogDirectory = new Path(requireNonNull(catalogDirectory, "baseDirectory is null"));
+        this.hdfsContext = new HdfsContext(ConnectorIdentity.ofUser(metastoreUser));
+        this.assumeCanonicalPartitionKeys = assumeCanonicalPartitionKeys;
         try {
             metadataFileSystem = hdfsEnvironment.getFileSystem(hdfsContext, this.catalogDirectory);
         }
@@ -329,23 +321,6 @@ public class FileHiveMetastore
     }
 
     @Override
-    public synchronized void setTableOwner(HiveIdentity identity, String databaseName, String tableName, HivePrincipal principal)
-    {
-        // TODO Add role support https://github.com/prestosql/presto/issues/5706
-        if (principal.getType() != USER) {
-            throw new PrestoException(NOT_SUPPORTED, "Setting table owner type as a role is not supported");
-        }
-
-        Table table = getRequiredTable(databaseName, tableName);
-        Path tableMetadataDirectory = getTableMetadataDirectory(table);
-        Table newTable = Table.builder(table)
-                .setOwner(principal.getName())
-                .build();
-
-        writeSchemaFile("table", tableMetadataDirectory, tableCodec, new TableMetadata(newTable), true);
-    }
-
-    @Override
     public Set<ColumnStatisticType> getSupportedColumnStatistics(Type type)
     {
         return ThriftMetastoreUtil.getSupportedColumnStatistics(type);
@@ -397,7 +372,7 @@ public class FileHiveMetastore
     }
 
     @Override
-    public synchronized void updateTableStatistics(HiveIdentity identity, String databaseName, String tableName, Function<PartitionStatistics, PartitionStatistics> update, AcidTransaction transaction)
+    public synchronized void updateTableStatistics(HiveIdentity identity, String databaseName, String tableName, Function<PartitionStatistics, PartitionStatistics> update)
     {
         PartitionStatistics originalStatistics = getTableStatistics(databaseName, tableName);
         PartitionStatistics updatedStatistics = update.apply(originalStatistics);
@@ -434,33 +409,6 @@ public class FileHiveMetastore
     @Override
     public synchronized List<String> getAllTables(String databaseName)
     {
-        return listAllTables(databaseName).stream()
-                .filter(hideDeltaLakeTables
-                        ? Predicate.not(ImmutableSet.copyOf(getTablesWithParameter(databaseName, SPARK_TABLE_PROVIDER_KEY, DELTA_LAKE_PROVIDER))::contains)
-                        : tableName -> true)
-                .collect(toImmutableList());
-    }
-
-    @Override
-    public synchronized List<String> getTablesWithParameter(String databaseName, String parameterKey, String parameterValue)
-    {
-        requireNonNull(parameterKey, "parameterKey is null");
-        requireNonNull(parameterValue, "parameterValue is null");
-
-        List<String> tables = listAllTables(databaseName);
-
-        return tables.stream()
-                .map(tableName -> getTable(databaseName, tableName))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .filter(table -> parameterValue.equals(table.getParameters().get(parameterKey)))
-                .map(Table::getTableName)
-                .collect(toImmutableList());
-    }
-
-    @GuardedBy("this")
-    private List<String> listAllTables(String databaseName)
-    {
         requireNonNull(databaseName, "databaseName is null");
 
         Optional<Database> database = getDatabase(databaseName);
@@ -476,15 +424,26 @@ public class FileHiveMetastore
     }
 
     @Override
-    public synchronized List<String> getAllViews(String databaseName)
+    public synchronized List<String> getTablesWithParameter(String databaseName, String parameterKey, String parameterValue)
     {
-        return getAllTables(databaseName).stream()
+        requireNonNull(parameterKey, "parameterKey is null");
+        requireNonNull(parameterValue, "parameterValue is null");
+
+        List<String> tables = getAllTables(databaseName);
+
+        return tables.stream()
                 .map(tableName -> getTable(databaseName, tableName))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
-                .filter(table -> TableType.valueOf(table.getTableType()).equals(VIRTUAL_VIEW))
+                .filter(table -> parameterValue.equals(table.getParameters().get(parameterKey)))
                 .map(Table::getTableName)
                 .collect(toImmutableList());
+    }
+
+    @Override
+    public synchronized List<String> getAllViews(String databaseName)
+    {
+        return getTablesWithParameter(databaseName, PRESTO_VIEW_FLAG, "true");
     }
 
     @Override

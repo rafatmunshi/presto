@@ -43,7 +43,6 @@ import io.prestosql.server.DynamicFilterService;
 import io.prestosql.server.protocol.Slug;
 import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.QueryId;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.split.SplitManager;
 import io.prestosql.split.SplitSource;
 import io.prestosql.sql.analyzer.Analysis;
@@ -105,7 +104,6 @@ public class SqlQueryExecution
     private final QueryStateMachine stateMachine;
     private final Slug slug;
     private final Metadata metadata;
-    private final TypeOperators typeOperators;
     private final SqlParser sqlParser;
     private final SplitManager splitManager;
     private final NodePartitioningManager nodePartitioningManager;
@@ -133,7 +131,7 @@ public class SqlQueryExecution
             QueryStateMachine stateMachine,
             Slug slug,
             Metadata metadata,
-            TypeOperators typeOperators, AccessControl accessControl,
+            AccessControl accessControl,
             SqlParser sqlParser,
             SplitManager splitManager,
             NodePartitioningManager nodePartitioningManager,
@@ -157,7 +155,6 @@ public class SqlQueryExecution
         try (SetThreadName ignored = new SetThreadName("Query-%s", stateMachine.getQueryId())) {
             this.slug = requireNonNull(slug, "slug is null");
             this.metadata = requireNonNull(metadata, "metadata is null");
-            this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
             this.sqlParser = requireNonNull(sqlParser, "sqlParser is null");
             this.splitManager = requireNonNull(splitManager, "splitManager is null");
             this.nodePartitioningManager = requireNonNull(nodePartitioningManager, "nodePartitioningManager is null");
@@ -432,15 +429,7 @@ public class SqlQueryExecution
     {
         // plan query
         PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
-        LogicalPlanner logicalPlanner = new LogicalPlanner(stateMachine.getSession(),
-                planOptimizers,
-                idAllocator,
-                metadata,
-                typeOperators,
-                new TypeAnalyzer(sqlParser, metadata),
-                statsCalculator,
-                costCalculator,
-                stateMachine.getWarningCollector());
+        LogicalPlanner logicalPlanner = new LogicalPlanner(stateMachine.getSession(), planOptimizers, idAllocator, metadata, new TypeAnalyzer(sqlParser, metadata), statsCalculator, costCalculator, stateMachine.getWarningCollector());
         Plan plan = logicalPlanner.plan(analysis);
         queryPlan.set(plan);
 
@@ -678,7 +667,6 @@ public class SqlQueryExecution
         private final SplitSchedulerStats schedulerStats;
         private final int scheduleSplitBatchSize;
         private final Metadata metadata;
-        private final TypeOperators typeOperators;
         private final AccessControl accessControl;
         private final SqlParser sqlParser;
         private final SplitManager splitManager;
@@ -701,7 +689,6 @@ public class SqlQueryExecution
         SqlQueryExecutionFactory(
                 QueryManagerConfig config,
                 Metadata metadata,
-                TypeOperators typeOperators,
                 AccessControl accessControl,
                 SqlParser sqlParser,
                 SplitManager splitManager,
@@ -725,7 +712,6 @@ public class SqlQueryExecution
             this.schedulerStats = requireNonNull(schedulerStats, "schedulerStats is null");
             this.scheduleSplitBatchSize = config.getScheduleSplitBatchSize();
             this.metadata = requireNonNull(metadata, "metadata is null");
-            this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
             this.accessControl = requireNonNull(accessControl, "accessControl is null");
             this.sqlParser = requireNonNull(sqlParser, "sqlParser is null");
             this.splitManager = requireNonNull(splitManager, "splitManager is null");
@@ -761,7 +747,6 @@ public class SqlQueryExecution
                     stateMachine,
                     slug,
                     metadata,
-                    typeOperators,
                     accessControl,
                     sqlParser,
                     splitManager,

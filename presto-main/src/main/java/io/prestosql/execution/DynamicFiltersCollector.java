@@ -56,7 +56,7 @@ public class DynamicFiltersCollector
             for (Map.Entry<DynamicFilterId, Domain> entry : newDynamicFilterDomains.entrySet()) {
                 dynamicFilterDomains.merge(
                         entry.getKey(),
-                        new VersionedDomain(currentVersion, entry.getValue()),
+                        new VersionedDomain(currentVersion, entry.getValue().simplify()),
                         (oldDomain, newDomain) -> new VersionedDomain(
                                 max(oldDomain.getVersion(), newDomain.getVersion()),
                                 oldDomain.getDomain().intersect(newDomain.getDomain())));

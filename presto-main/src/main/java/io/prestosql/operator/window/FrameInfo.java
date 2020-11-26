@@ -14,7 +14,6 @@
 package io.prestosql.operator.window;
 
 import io.prestosql.sql.tree.FrameBound;
-import io.prestosql.sql.tree.SortItem.Ordering;
 import io.prestosql.sql.tree.WindowFrame;
 
 import java.util.Objects;
@@ -28,33 +27,21 @@ public class FrameInfo
     private final WindowFrame.Type type;
     private final FrameBound.Type startType;
     private final int startChannel;
-    private final int sortKeyChannelForStartComparison;
     private final FrameBound.Type endType;
     private final int endChannel;
-    private final int sortKeyChannelForEndComparison;
-    private final int sortKeyChannel;
-    private final Optional<Ordering> ordering;
 
     public FrameInfo(
             WindowFrame.Type type,
             FrameBound.Type startType,
             Optional<Integer> startChannel,
-            Optional<Integer> sortKeyChannelForStartComparison,
             FrameBound.Type endType,
-            Optional<Integer> endChannel,
-            Optional<Integer> sortKeyChannelForEndComparison,
-            Optional<Integer> sortKeyChannel,
-            Optional<Ordering> ordering)
+            Optional<Integer> endChannel)
     {
         this.type = requireNonNull(type, "type is null");
         this.startType = requireNonNull(startType, "startType is null");
         this.startChannel = requireNonNull(startChannel, "startChannel is null").orElse(-1);
-        this.sortKeyChannelForStartComparison = requireNonNull(sortKeyChannelForStartComparison, "sortKeyChannelForStartComparison is null").orElse(-1);
         this.endType = requireNonNull(endType, "endType is null");
         this.endChannel = requireNonNull(endChannel, "endChannel is null").orElse(-1);
-        this.sortKeyChannelForEndComparison = requireNonNull(sortKeyChannelForEndComparison, "sortKeyChannelForEndComparison is null").orElse(-1);
-        this.sortKeyChannel = requireNonNull(sortKeyChannel, "sortKeyChannel is null").orElse(-1);
-        this.ordering = requireNonNull(ordering, "ordering is null");
     }
 
     public WindowFrame.Type getType()
@@ -72,11 +59,6 @@ public class FrameInfo
         return startChannel;
     }
 
-    public int getSortKeyChannelForStartComparison()
-    {
-        return sortKeyChannelForStartComparison;
-    }
-
     public FrameBound.Type getEndType()
     {
         return endType;
@@ -87,25 +69,10 @@ public class FrameInfo
         return endChannel;
     }
 
-    public int getSortKeyChannelForEndComparison()
-    {
-        return sortKeyChannelForEndComparison;
-    }
-
-    public int getSortKeyChannel()
-    {
-        return sortKeyChannel;
-    }
-
-    public Optional<Ordering> getOrdering()
-    {
-        return ordering;
-    }
-
     @Override
     public int hashCode()
     {
-        return Objects.hash(type, startType, startChannel, sortKeyChannelForStartComparison, endType, endChannel, sortKeyChannelForEndComparison, sortKeyChannel, ordering);
+        return Objects.hash(type, startType, startChannel, endType, endChannel);
     }
 
     @Override
@@ -124,12 +91,8 @@ public class FrameInfo
         return this.type == other.type &&
                 this.startType == other.startType &&
                 Objects.equals(this.startChannel, other.startChannel) &&
-                Objects.equals(this.sortKeyChannelForStartComparison, other.sortKeyChannelForStartComparison) &&
                 this.endType == other.endType &&
-                Objects.equals(this.endChannel, other.endChannel) &&
-                Objects.equals(this.sortKeyChannelForEndComparison, other.sortKeyChannelForEndComparison) &&
-                Objects.equals(this.sortKeyChannel, other.sortKeyChannel) &&
-                Objects.equals(this.ordering, other.ordering);
+                Objects.equals(this.endChannel, other.endChannel);
     }
 
     @Override
@@ -139,12 +102,8 @@ public class FrameInfo
                 .add("type", type)
                 .add("startType", startType)
                 .add("startChannel", startChannel)
-                .add("sortKeyChannelForStartComparison", sortKeyChannelForStartComparison)
                 .add("endType", endType)
                 .add("endChannel", endChannel)
-                .add("sortKeyChannelForEndComparison", sortKeyChannelForEndComparison)
-                .add("sortKeyChannel", sortKeyChannel)
-                .add("ordering", ordering)
                 .toString();
     }
 }

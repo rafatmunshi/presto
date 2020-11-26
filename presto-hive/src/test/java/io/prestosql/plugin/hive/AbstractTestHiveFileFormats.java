@@ -77,7 +77,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -94,7 +93,6 @@ import static io.prestosql.plugin.hive.HiveTestUtils.SESSION;
 import static io.prestosql.plugin.hive.HiveTestUtils.TYPE_MANAGER;
 import static io.prestosql.plugin.hive.HiveTestUtils.isDistinctFrom;
 import static io.prestosql.plugin.hive.HiveTestUtils.mapType;
-import static io.prestosql.plugin.hive.acid.AcidTransaction.NO_ACID_TRANSACTION;
 import static io.prestosql.plugin.hive.util.CompressionConfigUtil.configureCompression;
 import static io.prestosql.plugin.hive.util.HiveUtil.isStructuralType;
 import static io.prestosql.plugin.hive.util.SerDeUtils.serializeObject;
@@ -586,10 +584,7 @@ public abstract class AbstractTestHiveFileFormats
                 StorageFormat.fromHiveStorageFormat(storageFormat),
                 tableProperties,
                 jobConf,
-                session,
-                OptionalInt.empty(),
-                NO_ACID_TRANSACTION,
-                false);
+                session);
 
         FileWriter hiveFileWriter = fileWriter.orElseThrow(() -> new IllegalArgumentException("fileWriterFactory"));
         hiveFileWriter.appendRows(page);

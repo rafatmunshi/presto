@@ -15,7 +15,6 @@ package io.prestosql.plugin.phoenix;
 
 import com.google.common.collect.ImmutableMap;
 import io.airlift.log.Logger;
-import io.airlift.log.Logging;
 import io.prestosql.Session;
 import io.prestosql.metadata.QualifiedObjectName;
 import io.prestosql.plugin.tpch.TpchPlugin;
@@ -47,13 +46,10 @@ public final class PhoenixQueryRunner
     {
     }
 
-    public static DistributedQueryRunner createPhoenixQueryRunner(TestingPhoenixServer server, Map<String, String> extraProperties)
+    public static QueryRunner createPhoenixQueryRunner(TestingPhoenixServer server)
             throws Exception
     {
-        DistributedQueryRunner queryRunner = DistributedQueryRunner
-                .builder(createSession())
-                .setExtraProperties(extraProperties)
-                .build();
+        DistributedQueryRunner queryRunner = DistributedQueryRunner.builder(createSession()).build();
 
         queryRunner.installPlugin(new TpchPlugin());
         queryRunner.createCatalog("tpch", "tpch");
@@ -135,19 +131,5 @@ public final class PhoenixQueryRunner
                 .setCatalog("phoenix")
                 .setSchema(TPCH_SCHEMA)
                 .build();
-    }
-
-    public static void main(String[] args)
-            throws Exception
-    {
-        Logging.initialize();
-
-        DistributedQueryRunner queryRunner = createPhoenixQueryRunner(
-                TestingPhoenixServer.getInstance(),
-                ImmutableMap.of("http-server.http.port", "8080"));
-
-        Logger log = Logger.get(PhoenixQueryRunner.class);
-        log.info("======== SERVER STARTED ========");
-        log.info("\n====\n%s\n====", queryRunner.getCoordinator().getBaseUrl());
     }
 }

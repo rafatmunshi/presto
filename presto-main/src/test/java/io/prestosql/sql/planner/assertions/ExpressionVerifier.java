@@ -45,7 +45,6 @@ import io.prestosql.sql.tree.SimpleCaseExpression;
 import io.prestosql.sql.tree.StringLiteral;
 import io.prestosql.sql.tree.SubscriptExpression;
 import io.prestosql.sql.tree.SymbolReference;
-import io.prestosql.sql.tree.TimestampLiteral;
 import io.prestosql.sql.tree.TryExpression;
 import io.prestosql.sql.tree.WhenClause;
 
@@ -151,16 +150,6 @@ public final class ExpressionVerifier
     }
 
     @Override
-    protected Boolean visitTimestampLiteral(TimestampLiteral actual, Node expectedExpression)
-    {
-        if (!(expectedExpression instanceof TimestampLiteral)) {
-            return false;
-        }
-
-        return getValueFromLiteral(actual).equals(getValueFromLiteral(expectedExpression));
-    }
-
-    @Override
     protected Boolean visitBooleanLiteral(BooleanLiteral actual, Node expectedExpression)
     {
         if (!(expectedExpression instanceof BooleanLiteral)) {
@@ -192,10 +181,6 @@ public final class ExpressionVerifier
 
         if (expression instanceof DecimalLiteral) {
             return String.valueOf(((DecimalLiteral) expression).getValue());
-        }
-
-        if (expression instanceof TimestampLiteral) {
-            return ((TimestampLiteral) expression).getValue();
         }
 
         if (expression instanceof GenericLiteral) {

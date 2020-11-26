@@ -117,8 +117,7 @@ public class RowToRowCast
         }
         Class<?> castOperatorClass = generateRowCast(fromType, toType, functionDependencies);
         MethodHandle methodHandle = methodHandle(castOperatorClass, "castRow", ConnectorSession.class, Block.class);
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 ImmutableList.of(NEVER_NULL),
                 methodHandle);

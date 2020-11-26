@@ -25,7 +25,7 @@ import io.prestosql.server.ExpressionSerialization.ExpressionDeserializer;
 import io.prestosql.server.ExpressionSerialization.ExpressionSerializer;
 import io.prestosql.server.SliceSerialization.SliceDeserializer;
 import io.prestosql.server.SliceSerialization.SliceSerializer;
-import io.prestosql.spi.connector.SortOrder;
+import io.prestosql.spi.block.SortOrder;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.TypeSignature;
 import io.prestosql.sql.parser.SqlParser;
@@ -105,9 +105,7 @@ public class TestWindowNode
                 WindowFrame.Type.RANGE,
                 FrameBound.Type.UNBOUNDED_PRECEDING,
                 Optional.empty(),
-                Optional.empty(),
                 FrameBound.Type.UNBOUNDED_FOLLOWING,
-                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());

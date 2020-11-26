@@ -28,7 +28,10 @@ import io.prestosql.spi.type.Type;
 import io.prestosql.transaction.TransactionManager;
 
 import javax.inject.Inject;
+import javax.inject.Qualifier;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -100,6 +103,10 @@ import static io.prestosql.testing.TestingAccessControlManager.TestingPrivilegeT
 import static io.prestosql.testing.TestingAccessControlManager.TestingPrivilegeType.SHOW_COLUMNS;
 import static io.prestosql.testing.TestingAccessControlManager.TestingPrivilegeType.SHOW_CREATE_TABLE;
 import static io.prestosql.testing.TestingAccessControlManager.TestingPrivilegeType.VIEW_QUERY;
+import static java.lang.annotation.ElementType.FIELD;
+import static java.lang.annotation.ElementType.METHOD;
+import static java.lang.annotation.ElementType.PARAMETER;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 import static java.util.Objects.requireNonNull;
 
 public class TestingAccessControlManager
@@ -500,7 +507,7 @@ public class TestingAccessControlManager
             denySelectColumns(tableName.toString(), columns);
         }
         for (String column : columns) {
-            if (shouldDenyPrivilege(context.getIdentity().getUser(), tableName.getObjectName() + "." + column, SELECT_COLUMN)) {
+            if (shouldDenyPrivilege(context.getIdentity().getUser(), column, SELECT_COLUMN)) {
                 denySelectColumns(tableName.toString(), columns);
             }
         }
@@ -686,4 +693,9 @@ public class TestingAccessControlManager
             return Objects.hash(identity, table, column);
         }
     }
+
+    @Retention(RUNTIME)
+    @Target({FIELD, PARAMETER, METHOD})
+    @Qualifier
+    public @interface ForSystemAccessControl {}
 }

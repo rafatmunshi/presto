@@ -39,6 +39,7 @@ public class TestQuerySerializationFailures
     {
         DistributedQueryRunner queryRunner = DistributedQueryRunner
                 .builder(testSessionBuilder().build())
+                .setNodeCount(4)
                 .build();
 
         queryRunner.installPlugin(new BogusPlugin());

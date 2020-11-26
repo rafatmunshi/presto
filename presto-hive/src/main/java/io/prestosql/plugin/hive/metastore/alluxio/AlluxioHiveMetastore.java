@@ -25,7 +25,6 @@ import com.google.inject.Inject;
 import io.prestosql.plugin.hive.HiveBasicStatistics;
 import io.prestosql.plugin.hive.HiveType;
 import io.prestosql.plugin.hive.PartitionStatistics;
-import io.prestosql.plugin.hive.acid.AcidTransaction;
 import io.prestosql.plugin.hive.authentication.HiveIdentity;
 import io.prestosql.plugin.hive.metastore.Column;
 import io.prestosql.plugin.hive.metastore.Database;
@@ -33,7 +32,6 @@ import io.prestosql.plugin.hive.metastore.HiveColumnStatistics;
 import io.prestosql.plugin.hive.metastore.HiveMetastore;
 import io.prestosql.plugin.hive.metastore.HivePrincipal;
 import io.prestosql.plugin.hive.metastore.HivePrivilegeInfo;
-import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.Partition;
 import io.prestosql.plugin.hive.metastore.PartitionWithStatistics;
 import io.prestosql.plugin.hive.metastore.PrincipalPrivileges;
@@ -55,7 +53,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static io.prestosql.plugin.hive.HiveErrorCode.HIVE_METASTORE_ERROR;
@@ -73,11 +70,9 @@ public class AlluxioHiveMetastore
     private final TableMasterClient client;
 
     @Inject
-    public AlluxioHiveMetastore(TableMasterClient client, MetastoreConfig metastoreConfig)
+    public AlluxioHiveMetastore(TableMasterClient client)
     {
         this.client = requireNonNull(client);
-        requireNonNull(metastoreConfig, "metastoreConfig is null");
-        checkArgument(!metastoreConfig.isHideDeltaLakeTables(), "Hiding Delta Lake tables is not supported"); // TODO
     }
 
     @Override
@@ -187,8 +182,7 @@ public class AlluxioHiveMetastore
             HiveIdentity identity,
             String databaseName,
             String tableName,
-            Function<PartitionStatistics, PartitionStatistics> update,
-            AcidTransaction transaction)
+            Function<PartitionStatistics, PartitionStatistics> update)
     {
         throw new PrestoException(NOT_SUPPORTED, "updateTableStatistics");
     }
@@ -307,12 +301,6 @@ public class AlluxioHiveMetastore
     public void commentTable(HiveIdentity identity, String databaseName, String tableName, Optional<String> comment)
     {
         throw new PrestoException(NOT_SUPPORTED, "commentTable");
-    }
-
-    @Override
-    public void setTableOwner(HiveIdentity identity, String databaseName, String tableName, HivePrincipal principal)
-    {
-        throw new PrestoException(NOT_SUPPORTED, "setTableOwner");
     }
 
     @Override

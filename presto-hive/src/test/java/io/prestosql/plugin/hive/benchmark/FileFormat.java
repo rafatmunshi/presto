@@ -58,7 +58,6 @@ import io.prestosql.spi.Page;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.connector.ConnectorPageSource;
 import io.prestosql.spi.connector.ConnectorSession;
-import io.prestosql.spi.connector.DynamicFilter;
 import io.prestosql.spi.connector.RecordPageSource;
 import io.prestosql.spi.predicate.TupleDomain;
 import io.prestosql.spi.type.Type;
@@ -85,7 +84,6 @@ import static io.prestosql.plugin.hive.HiveColumnHandle.createBaseColumn;
 import static io.prestosql.plugin.hive.HiveTestUtils.TYPE_MANAGER;
 import static io.prestosql.plugin.hive.HiveTestUtils.createGenericHiveRecordCursorProvider;
 import static io.prestosql.plugin.hive.HiveType.toHiveType;
-import static io.prestosql.plugin.hive.acid.AcidTransaction.NO_ACID_TRANSACTION;
 import static io.prestosql.plugin.hive.metastore.StorageFormat.fromHiveStorageFormat;
 import static io.prestosql.plugin.hive.util.CompressionConfigUtil.configureCompression;
 import static java.lang.String.join;
@@ -369,11 +367,9 @@ public enum FileFormat
         HivePageSourceProvider factory = new HivePageSourceProvider(
                 TYPE_MANAGER,
                 hdfsEnvironment,
-                new HiveConfig(),
                 getHivePageSourceFactory(hdfsEnvironment).map(ImmutableSet::of).orElse(ImmutableSet.of()),
                 getHiveRecordCursorProvider(hdfsEnvironment).map(ImmutableSet::of).orElse(ImmutableSet.of()),
-                new GenericHiveRecordCursorProvider(hdfsEnvironment, new HiveConfig()),
-                Optional.empty());
+                new GenericHiveRecordCursorProvider(hdfsEnvironment, new HiveConfig()));
 
         Properties schema = createSchema(getFormat(), schemaColumnNames, schemaColumnTypes);
 
@@ -390,7 +386,6 @@ public enum FileFormat
                 ImmutableList.of(),
                 ImmutableList.of(),
                 OptionalInt.empty(),
-                0,
                 false,
                 TableToPartitionMapping.empty(),
                 Optional.empty(),
@@ -400,9 +395,9 @@ public enum FileFormat
         ConnectorPageSource hivePageSource = factory.createPageSource(
                 TestingConnectorTransactionHandle.INSTANCE,
                 session, split,
-                new HiveTableHandle("schema_name", "table_name", ImmutableMap.of(), ImmutableList.of(), ImmutableList.of(), Optional.empty()),
+                new HiveTableHandle("schema_name", "table_name", ImmutableMap.of(), ImmutableList.of(), Optional.empty()),
                 readColumns,
-                DynamicFilter.EMPTY);
+                TupleDomain.all());
 
         return hivePageSource;
     }
@@ -473,10 +468,7 @@ public enum FileFormat
                         schema,
                         readColumns,
                         TupleDomain.all(),
-                        Optional.empty(),
-                        OptionalInt.empty(),
-                        false,
-                        NO_ACID_TRANSACTION);
+                        Optional.empty());
 
         checkState(readerPageSourceWithProjections.isPresent(), "readerPageSourceWithProjections is not present");
         checkState(!readerPageSourceWithProjections.get().getProjectedReaderColumns().isPresent(), "projection should not be required");

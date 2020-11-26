@@ -108,6 +108,14 @@ public final class TypeUtils
         return false;
     }
 
+    static long hashPosition(Type type, Block block, int position)
+    {
+        if (block.isNull(position)) {
+            return NULL_HASH_CODE;
+        }
+        return type.hash(block, position);
+    }
+
     static void checkElementNotNull(boolean isNull, String errorMsg)
     {
         if (isNull) {

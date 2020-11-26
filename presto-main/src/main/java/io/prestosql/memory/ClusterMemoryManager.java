@@ -85,6 +85,7 @@ import static io.prestosql.spi.StandardErrorCode.CLUSTER_OUT_OF_MEMORY;
 import static java.lang.Math.min;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+import static org.weakref.jmx.ObjectNames.generatedNameOf;
 
 public class ClusterMemoryManager
         implements ClusterMemoryPoolManager
@@ -531,7 +532,7 @@ public class ClusterMemoryManager
     {
         try (Closer closer = Closer.create()) {
             for (ClusterMemoryPool pool : pools.values()) {
-                closer.register(() -> exporter.unexportWithGeneratedName(ClusterMemoryPool.class, pool.getId().toString()));
+                closer.register(() -> exporter.unexport(generatedNameOf(ClusterMemoryPool.class, pool.getId().toString())));
             }
             closer.register(listenerExecutor::shutdownNow);
         }

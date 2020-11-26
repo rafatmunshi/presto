@@ -94,8 +94,7 @@ public final class ZipFunction
         List<Type> types = this.typeParameters.stream().map(functionBinding::getTypeVariable).collect(toImmutableList());
         List<Class<?>> javaArgumentTypes = nCopies(types.size(), Block.class);
         MethodHandle methodHandle = METHOD_HANDLE.bindTo(types).asVarargsCollector(Block[].class).asType(methodType(Block.class, javaArgumentTypes));
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 nCopies(types.size(), NEVER_NULL),
                 methodHandle);

@@ -36,7 +36,6 @@ public class TestOracleConfig
     {
         assertRecordedDefaults(recordDefaults(OracleConfig.class)
                 .setSynonymsEnabled(false)
-                .setRemarksReportingEnabled(false)
                 .setDefaultNumberScale(null)
                 .setNumberRoundingMode(RoundingMode.UNNECESSARY)
                 .setConnectionPoolEnabled(true)
@@ -50,7 +49,6 @@ public class TestOracleConfig
     {
         Map<String, String> properties = new ImmutableMap.Builder<String, String>()
                 .put("oracle.synonyms.enabled", "true")
-                .put("oracle.remarks-reporting.enabled", "true")
                 .put("oracle.number.default-scale", "2")
                 .put("oracle.number.rounding-mode", "CEILING")
                 .put("oracle.connection-pool.enabled", "false")
@@ -61,7 +59,6 @@ public class TestOracleConfig
 
         OracleConfig expected = new OracleConfig()
                 .setSynonymsEnabled(true)
-                .setRemarksReportingEnabled(true)
                 .setDefaultNumberScale(2)
                 .setNumberRoundingMode(RoundingMode.CEILING)
                 .setConnectionPoolEnabled(false)

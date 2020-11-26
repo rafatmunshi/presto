@@ -18,7 +18,6 @@ import io.airlift.units.DataSize;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.PageBuilder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.testing.TestingTaskContext;
 import io.prestosql.tpch.LineItem;
@@ -49,8 +48,8 @@ import java.util.concurrent.TimeUnit;
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static io.airlift.units.DataSize.Unit.GIGABYTE;
 import static io.prestosql.SessionTestUtils.TEST_SESSION;
-import static io.prestosql.spi.connector.SortOrder.ASC_NULLS_FIRST;
-import static io.prestosql.spi.connector.SortOrder.DESC_NULLS_LAST;
+import static io.prestosql.spi.block.SortOrder.ASC_NULLS_FIRST;
+import static io.prestosql.spi.block.SortOrder.DESC_NULLS_LAST;
 import static io.prestosql.spi.type.DateType.DATE;
 import static io.prestosql.spi.type.DoubleType.DOUBLE;
 import static io.prestosql.spi.type.VarcharType.VARCHAR;
@@ -88,8 +87,8 @@ public class BenchmarkTopNOperator
         @Setup
         public void setup()
         {
-            executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-%s"));
-            scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+            executor = newCachedThreadPool(daemonThreadsNamed("test-executor-%s"));
+            scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("test-scheduledExecutor-%s"));
 
             List<Type> types = ImmutableList.of(DOUBLE, DOUBLE, VARCHAR, DOUBLE);
             pages = createInputPages(Integer.valueOf(positionsPerPage), types);
@@ -99,8 +98,7 @@ public class BenchmarkTopNOperator
                     types,
                     Integer.valueOf(topN),
                     ImmutableList.of(0, 2),
-                    ImmutableList.of(DESC_NULLS_LAST, ASC_NULLS_FIRST),
-                    new TypeOperators());
+                    ImmutableList.of(DESC_NULLS_LAST, ASC_NULLS_FIRST));
         }
 
         @TearDown

@@ -16,7 +16,6 @@ package io.prestosql.plugin.thrift.integration;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.io.Closer;
 import io.airlift.drift.codec.ThriftCodecManager;
 import io.airlift.drift.server.DriftServer;
 import io.airlift.drift.server.DriftService;
@@ -45,13 +44,12 @@ import io.prestosql.testing.QueryRunner;
 import io.prestosql.testing.TestingAccessControlManager;
 import io.prestosql.transaction.TransactionManager;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
 
-import static io.airlift.testing.Closeables.closeAllSuppress;
+import static io.airlift.testing.Closeables.closeQuietly;
 import static io.prestosql.testing.TestingSession.testSessionBuilder;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
@@ -73,7 +71,7 @@ public final class ThriftQueryRunner
             return new ThriftQueryRunnerWithServers(runner, servers);
         }
         catch (Throwable t) {
-            closeAllSuppress(t, runner);
+            closeQuietly(runner);
             // runner might be null, so closing servers explicitly
             if (servers != null) {
                 for (DriftServer server : servers) {
@@ -168,20 +166,15 @@ public final class ThriftQueryRunner
         @Override
         public void close()
         {
-            try (Closer closer = Closer.create()) {
-                if (thriftServers != null) {
-                    for (DriftServer server : thriftServers) {
-                        closer.register(server::shutdown);
-                    }
-                    thriftServers = null;
-                }
-                if (source != null) {
-                    closer.register(source);
-                    source = null;
-                }
+            if (source != null) {
+                closeQuietly(source);
+                source = null;
             }
-            catch (IOException e) {
-                throw new RuntimeException(e);
+            if (thriftServers != null) {
+                for (DriftServer server : thriftServers) {
+                    server.shutdown();
+                }
+                thriftServers = null;
             }
         }
 

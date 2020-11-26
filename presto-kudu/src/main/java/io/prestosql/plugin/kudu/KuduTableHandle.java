@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.OptionalLong;
 
 import static java.util.Objects.requireNonNull;
 
@@ -38,7 +37,6 @@ public class KuduTableHandle
     private final Optional<List<ColumnHandle>> desiredColumns;
     private final boolean isDeleteHandle;
     private final OptionalInt bucketCount;
-    private final OptionalLong limit;
 
     @JsonCreator
     public KuduTableHandle(
@@ -46,10 +44,9 @@ public class KuduTableHandle
             @JsonProperty("constraint") TupleDomain<ColumnHandle> constraint,
             @JsonProperty("desiredColumns") Optional<List<ColumnHandle>> desiredColumns,
             @JsonProperty("isDeleteHandle") boolean isDeleteHandle,
-            @JsonProperty("bucketCount") OptionalInt bucketCount,
-            @JsonProperty("limit") OptionalLong limit)
+            @JsonProperty("bucketCount") OptionalInt bucketCount)
     {
-        this(schemaTableName, null, constraint, desiredColumns, isDeleteHandle, bucketCount, limit);
+        this(schemaTableName, null, constraint, desiredColumns, isDeleteHandle, bucketCount);
     }
 
     public KuduTableHandle(
@@ -58,8 +55,7 @@ public class KuduTableHandle
             TupleDomain<ColumnHandle> constraint,
             Optional<List<ColumnHandle>> desiredColumns,
             boolean isDeleteHandle,
-            @JsonProperty("bucketCount") OptionalInt bucketCount,
-            @JsonProperty("limit") OptionalLong limit)
+            OptionalInt bucketCount)
     {
         this.schemaTableName = requireNonNull(schemaTableName, "schemaTableName is null");
         this.table = table;
@@ -67,7 +63,6 @@ public class KuduTableHandle
         this.desiredColumns = requireNonNull(desiredColumns, "desiredColumns is null");
         this.isDeleteHandle = isDeleteHandle;
         this.bucketCount = requireNonNull(bucketCount, "bucketCount is empty");
-        this.limit = requireNonNull(limit, "limit is null");
     }
 
     public KuduTable getTable(KuduClientSession session)
@@ -108,16 +103,10 @@ public class KuduTableHandle
         return bucketCount;
     }
 
-    @JsonProperty
-    public OptionalLong getLimit()
-    {
-        return limit;
-    }
-
     @Override
     public int hashCode()
     {
-        return Objects.hash(schemaTableName, constraint, desiredColumns, isDeleteHandle, bucketCount, limit);
+        return Objects.hash(schemaTableName, constraint, desiredColumns, isDeleteHandle);
     }
 
     @Override
@@ -134,9 +123,7 @@ public class KuduTableHandle
         return Objects.equals(this.schemaTableName, other.schemaTableName) &&
                 Objects.equals(this.constraint, other.constraint) &&
                 Objects.equals(this.desiredColumns, other.desiredColumns) &&
-                Objects.equals(this.isDeleteHandle, other.isDeleteHandle) &&
-                Objects.equals(this.bucketCount, other.bucketCount) &&
-                Objects.equals(this.limit, other.limit);
+                Objects.equals(this.isDeleteHandle, other.isDeleteHandle);
     }
 
     @Override

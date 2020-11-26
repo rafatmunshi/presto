@@ -13,11 +13,9 @@
  */
 package io.prestosql.server.ui;
 
-import io.airlift.log.Logger;
 import io.prestosql.server.security.PasswordAuthenticatorManager;
 import io.prestosql.server.security.SecurityConfig;
 import io.prestosql.spi.security.AccessDeniedException;
-import io.prestosql.spi.security.PasswordAuthenticator;
 
 import javax.inject.Inject;
 
@@ -26,7 +24,6 @@ import static java.util.Objects.requireNonNull;
 public class PasswordManagerFormAuthenticator
         implements FormAuthenticator
 {
-    private static final Logger log = Logger.get(PasswordManagerFormAuthenticator.class);
     private final PasswordAuthenticatorManager passwordAuthenticatorManager;
     private final boolean insecureAuthenticationOverHttpAllowed;
 
@@ -66,16 +63,11 @@ public class PasswordManagerFormAuthenticator
             return insecureAuthenticationOverHttpAllowed && password == null;
         }
 
-        PasswordAuthenticator authenticator = passwordAuthenticatorManager.getAuthenticator();
         try {
-            authenticator.createAuthenticatedPrincipal(username, password);
+            passwordAuthenticatorManager.getAuthenticator().createAuthenticatedPrincipal(username, password);
             return true;
         }
         catch (AccessDeniedException e) {
-            return false;
-        }
-        catch (RuntimeException e) {
-            log.debug(e, "Error authenticating user for Web UI");
             return false;
         }
     }

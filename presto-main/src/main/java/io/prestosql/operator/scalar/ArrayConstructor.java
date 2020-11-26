@@ -113,8 +113,7 @@ public final class ArrayConstructor
         catch (ReflectiveOperationException e) {
             throw new RuntimeException(e);
         }
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 nCopies(stackTypes.size(), BOXED_NULLABLE),
                 methodHandle);

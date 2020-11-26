@@ -113,6 +113,7 @@ public class TestPushTopNThroughProject
         tester().assertThat(new PushTopNThroughProject())
                 .on(p -> {
                     Symbol projectedA = p.symbol("projectedA");
+                    Symbol a = p.symbol("a");
                     return p.topN(
                             1,
                             ImmutableList.of(projectedA),

@@ -119,9 +119,7 @@ public class TestHiveCoercion
                         //"    float_to_decimal           " + floatType + "," + // this coercion is not permitted in Hive 3. TODO test this on Hive < 3.
                         //"    double_to_decimal          DOUBLE," + // this coercion is not permitted in Hive 3. TODO test this on Hive < 3.
                         "    decimal_to_float           DECIMAL(10,5)," +
-                        "    decimal_to_double          DECIMAL(10,5)," +
-                        "    varchar_to_bigger_varchar  VARCHAR(3)," +
-                        "    varchar_to_smaller_varchar VARCHAR(3)" +
+                        "    decimal_to_double          DECIMAL(10,5)" +
                         ") " +
                         "PARTITIONED BY (id BIGINT) " +
                         rowFormat.map(s -> format("ROW FORMAT %s ", s)).orElse("") +
@@ -310,8 +308,6 @@ public class TestHiveCoercion
                         //"  DOUBLE '12345.12345', " +
                         "  DECIMAL '12345.12345', " +
                         "  DECIMAL '12345.12345', " +
-                        "  'abc', " +
-                        "  'abc', " +
                         "  1), " +
                         "(" +
                         "  CAST(ROW (NULL, 1, -100, -2323, -12345) AS ROW(keep VARCHAR, ti2si TINYINT, si2int SMALLINT, int2bi INTEGER, bi2vc BIGINT)), " +
@@ -334,8 +330,6 @@ public class TestHiveCoercion
                         //"  DOUBLE '-12345.12345', " +
                         "  DECIMAL '-12345.12345', " +
                         "  DECIMAL '-12345.12345', " +
-                        "  '\uD83D\uDCB0\uD83D\uDCB0\uD83D\uDCB0', " +
-                        "  '\uD83D\uDCB0\uD83D\uDCB0\uD83D\uDCB0', " +
                         "  1)",
                 tableName,
                 floatToDoubleType));
@@ -367,8 +361,6 @@ public class TestHiveCoercion
                         //new BigDecimal("12345.12345"),
                         Float.parseFloat(decimalToFloatVal),
                         12345.12345,
-                        "abc",
-                        "ab",
                         1),
                 row(
                         asMap("keep", null, "ti2si", (short) 1, "si2int", -100, "int2bi", -2323L, "bi2vc", "-12345"),
@@ -391,8 +383,6 @@ public class TestHiveCoercion
                         //new BigDecimal("-12345.12345"),
                         -Float.parseFloat(decimalToFloatVal),
                         -12345.12345,
-                        "\uD83D\uDCB0\uD83D\uDCB0\uD83D\uDCB0",
-                        "\uD83D\uDCB0\uD83D\uDCB0",
                         1));
 
         // test structural values (tempto can't handle map and row)
@@ -430,8 +420,6 @@ public class TestHiveCoercion
                 //row("double_to_decimal", "decimal(10,5)"),
                 row("decimal_to_float", floatType),
                 row("decimal_to_double", "double"),
-                row("varchar_to_bigger_varchar", "varchar(4)"),
-                row("varchar_to_smaller_varchar", "varchar(2)"),
                 row("id", "bigint"));
     }
 
@@ -460,8 +448,6 @@ public class TestHiveCoercion
                 //DECIMAL,
                 floatType,
                 DOUBLE,
-                VARCHAR,
-                VARCHAR,
                 BIGINT);
     }
 
@@ -489,8 +475,6 @@ public class TestHiveCoercion
         //onHive().executeQuery(format("ALTER TABLE %s CHANGE COLUMN double_to_decimal double_to_decimal DECIMAL(10,5)", tableName));
         onHive().executeQuery(format("ALTER TABLE %s CHANGE COLUMN decimal_to_float decimal_to_float %s", tableName, floatType));
         onHive().executeQuery(format("ALTER TABLE %s CHANGE COLUMN decimal_to_double decimal_to_double double", tableName));
-        onHive().executeQuery(format("ALTER TABLE %s CHANGE COLUMN varchar_to_bigger_varchar varchar_to_bigger_varchar varchar(4)", tableName));
-        onHive().executeQuery(format("ALTER TABLE %s CHANGE COLUMN varchar_to_smaller_varchar varchar_to_smaller_varchar varchar(2)", tableName));
     }
 
     private static TableInstance<?> mutableTableInstanceOf(TableDefinition tableDefinition)

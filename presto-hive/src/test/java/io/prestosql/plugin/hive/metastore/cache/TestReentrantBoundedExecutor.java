@@ -18,7 +18,6 @@ import org.testng.annotations.Test;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.concurrent.Executors.newCachedThreadPool;
@@ -32,31 +31,25 @@ public class TestReentrantBoundedExecutor
     {
         AtomicInteger callCounter = new AtomicInteger();
         SettableFuture<Object> future = SettableFuture.create();
-        ExecutorService executor = newCachedThreadPool();
-        try {
-            Executor reentrantExecutor = new ReentrantBoundedExecutor(executor, 1);
+        Executor reentrantExecutor = new ReentrantBoundedExecutor(newCachedThreadPool(), 1);
+        reentrantExecutor.execute(() -> {
+            callCounter.incrementAndGet();
             reentrantExecutor.execute(() -> {
                 callCounter.incrementAndGet();
-                reentrantExecutor.execute(() -> {
-                    callCounter.incrementAndGet();
-                    future.set(null);
-                });
-                try {
-                    future.get();
-                }
-                catch (Exception ignored) {
-                }
+                future.set(null);
             });
-            future.get();
+            try {
+                future.get();
+            }
+            catch (Exception ignored) {
+            }
+        });
+        future.get();
 
-            SettableFuture<Object> secondFuture = SettableFuture.create();
-            reentrantExecutor.execute(() -> secondFuture.set(null));
-            secondFuture.get();
+        SettableFuture<Object> secondFuture = SettableFuture.create();
+        reentrantExecutor.execute(() -> secondFuture.set(null));
+        secondFuture.get();
 
-            assertEquals(callCounter.get(), 2);
-        }
-        finally {
-            executor.shutdownNow();
-        }
+        assertEquals(callCounter.get(), 2);
     }
 }

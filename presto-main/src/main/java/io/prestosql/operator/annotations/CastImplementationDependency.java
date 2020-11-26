@@ -32,9 +32,9 @@ public final class CastImplementationDependency
     private final TypeSignature fromType;
     private final TypeSignature toType;
 
-    public CastImplementationDependency(TypeSignature fromType, TypeSignature toType, Optional<InvocationConvention> invocationConvention, Class<?> type)
+    public CastImplementationDependency(TypeSignature fromType, TypeSignature toType, Optional<InvocationConvention> invocationConvention)
     {
-        super(invocationConvention, type);
+        super(invocationConvention);
         this.fromType = requireNonNull(fromType, "fromType is null");
         this.toType = requireNonNull(toType, "toType is null");
     }

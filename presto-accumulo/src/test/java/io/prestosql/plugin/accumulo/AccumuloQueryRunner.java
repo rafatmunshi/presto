@@ -68,6 +68,7 @@ public final class AccumuloQueryRunner
             throws Exception
     {
         DistributedQueryRunner queryRunner = DistributedQueryRunner.builder(createSession())
+                .setNodeCount(4)
                 .setExtraProperties(extraProperties)
                 .build();
 

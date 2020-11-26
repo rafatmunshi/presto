@@ -318,9 +318,10 @@ public class TestHiveBucketedTables
 
     private static void populateRowToHiveTable(String destination, List<String> values, Optional<String> partition)
     {
-        String queryStatement = "INSERT INTO TABLE " + destination +
-                (partition.isPresent() ? format(" PARTITION (%s) ", partition.get()) : " ") +
-                "SELECT " + join(",", values) + " FROM (SELECT 'foo') x";
+        String queryStatement = format("INSERT INTO TABLE %s" +
+                        (partition.isPresent() ? format(" PARTITION (%s) ", partition.get()) : " ") +
+                        "SELECT %s from (select 'foo') x",
+                destination, join(",", values));
 
         onHive().executeQuery("set hive.enforce.bucketing = true");
         onHive().executeQuery("set hive.enforce.sorting = true");

@@ -448,7 +448,7 @@ public final class KuduTableProperties
             RangePartitionDefinition definition = new RangePartitionDefinition();
             definition.setColumns(rangeColumns.stream()
                     .map(i -> schema.getColumns().get(i).getName())
-                    .collect(toImmutableList()));
+                    .collect(ImmutableList.toImmutableList()));
             partitionDesign.setRange(definition);
         }
 

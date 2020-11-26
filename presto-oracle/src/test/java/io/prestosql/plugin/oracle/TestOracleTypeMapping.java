@@ -14,10 +14,11 @@
 package io.prestosql.plugin.oracle;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.prestosql.testing.QueryRunner;
 import io.prestosql.testing.sql.SqlExecutor;
 import org.testng.annotations.AfterClass;
+
+import static io.prestosql.plugin.oracle.OracleQueryRunner.createOracleQueryRunner;
 
 public class TestOracleTypeMapping
         extends AbstractTestOracleTypeMapping
@@ -29,7 +30,7 @@ public class TestOracleTypeMapping
             throws Exception
     {
         this.oracleServer = new TestingOracleServer();
-        return OracleQueryRunner.createOracleQueryRunner(oracleServer, ImmutableMap.of(), ImmutableList.of(), false, false);
+        return createOracleQueryRunner(oracleServer, ImmutableList.of());
     }
 
     @AfterClass(alwaysRun = true)

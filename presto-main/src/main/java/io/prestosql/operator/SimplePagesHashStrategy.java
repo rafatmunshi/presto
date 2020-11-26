@@ -14,24 +14,24 @@
 package io.prestosql.operator;
 
 import com.google.common.collect.ImmutableList;
+import io.prestosql.metadata.Metadata;
+import io.prestosql.metadata.ResolvedFunction;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.PageBuilder;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators;
-import io.prestosql.type.BlockTypeOperators.BlockPositionComparison;
-import io.prestosql.type.BlockTypeOperators.BlockPositionEqual;
-import io.prestosql.type.BlockTypeOperators.BlockPositionHashCode;
-import io.prestosql.type.BlockTypeOperators.BlockPositionIsDistinctFrom;
+import io.prestosql.type.TypeUtils;
 import org.openjdk.jol.info.ClassLayout;
 
+import java.lang.invoke.MethodHandle;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.prestosql.spi.function.OperatorType.IS_DISTINCT_FROM;
 import static io.prestosql.spi.type.BigintType.BIGINT;
+import static io.prestosql.util.Failures.internalError;
 import static java.util.Objects.requireNonNull;
 
 public class SimplePagesHashStrategy
@@ -39,15 +39,12 @@ public class SimplePagesHashStrategy
 {
     private static final int INSTANCE_SIZE = ClassLayout.parseClass(SimplePagesHashStrategy.class).instanceSize();
     private final List<Type> types;
-    private final List<BlockPositionComparison> comparisonOperators;
     private final List<Integer> outputChannels;
     private final List<List<Block>> channels;
     private final List<Integer> hashChannels;
     private final List<Block> precomputedHashChannel;
     private final Optional<Integer> sortChannel;
-    private final List<BlockPositionEqual> equalOperators;
-    private final List<BlockPositionHashCode> hashCodeOperators;
-    private final List<BlockPositionIsDistinctFrom> isDistinctFromOperators;
+    private final List<MethodHandle> distinctFromMethodHandles;
 
     public SimplePagesHashStrategy(
             List<Type> types,
@@ -56,12 +53,9 @@ public class SimplePagesHashStrategy
             List<Integer> hashChannels,
             OptionalInt precomputedHashChannel,
             Optional<Integer> sortChannel,
-            BlockTypeOperators blockTypeOperators)
+            Metadata metadata)
     {
         this.types = ImmutableList.copyOf(requireNonNull(types, "types is null"));
-        this.comparisonOperators = types.stream()
-                .map(blockTypeOperators::getComparisonOperator)
-                .collect(toImmutableList());
         this.outputChannels = ImmutableList.copyOf(requireNonNull(outputChannels, "outputChannels is null"));
         this.channels = ImmutableList.copyOf(requireNonNull(channels, "channels is null"));
 
@@ -74,19 +68,13 @@ public class SimplePagesHashStrategy
             this.precomputedHashChannel = null;
         }
         this.sortChannel = requireNonNull(sortChannel, "sortChannel is null");
-
-        this.equalOperators = hashChannels.stream()
-                .map(types::get)
-                .map(blockTypeOperators::getEqualOperator)
-                .collect(toImmutableList());
-        this.hashCodeOperators = hashChannels.stream()
-                .map(types::get)
-                .map(blockTypeOperators::getHashCodeOperator)
-                .collect(toImmutableList());
-        this.isDistinctFromOperators = hashChannels.stream()
-                .map(types::get)
-                .map(blockTypeOperators::getDistinctFromOperator)
-                .collect(toImmutableList());
+        requireNonNull(metadata, "metadata is null");
+        ImmutableList.Builder<MethodHandle> distinctFromMethodHandlesBuilder = ImmutableList.builder();
+        for (int i = 0; i < hashChannels.size(); i++) {
+            ResolvedFunction resolvedFunction = metadata.resolveOperator(IS_DISTINCT_FROM, ImmutableList.of(types.get(i), types.get(i)));
+            distinctFromMethodHandlesBuilder.add(metadata.getScalarFunctionInvoker(resolvedFunction, Optional.empty()).getMethodHandle());
+        }
+        distinctFromMethodHandles = distinctFromMethodHandlesBuilder.build();
     }
 
     @Override
@@ -123,9 +111,10 @@ public class SimplePagesHashStrategy
             return BIGINT.getLong(precomputedHashChannel.get(blockIndex), position);
         }
         long result = 0;
-        for (int i = 0; i < hashChannels.size(); i++) {
-            Block block = channels.get(hashChannels.get(i)).get(blockIndex);
-            result = result * 31 + hashCodeOperators.get(i).hashCodeNullSafe(block, position);
+        for (int hashChannel : hashChannels) {
+            Type type = types.get(hashChannel);
+            Block block = channels.get(hashChannel).get(blockIndex);
+            result = result * 31 + TypeUtils.hashPosition(type, block, position);
         }
         return result;
     }
@@ -135,8 +124,10 @@ public class SimplePagesHashStrategy
     {
         long result = 0;
         for (int i = 0; i < hashChannels.size(); i++) {
+            int hashChannel = hashChannels.get(i);
+            Type type = types.get(hashChannel);
             Block block = page.getBlock(i);
-            result = result * 31 + hashCodeOperators.get(i).hashCodeNullSafe(block, position);
+            result = result * 31 + TypeUtils.hashPosition(type, block, position);
         }
         return result;
     }
@@ -145,9 +136,11 @@ public class SimplePagesHashStrategy
     public boolean rowEqualsRow(int leftPosition, Page leftPage, int rightPosition, Page rightPage)
     {
         for (int i = 0; i < hashChannels.size(); i++) {
+            int hashChannel = hashChannels.get(i);
+            Type type = types.get(hashChannel);
             Block leftBlock = leftPage.getBlock(i);
             Block rightBlock = rightPage.getBlock(i);
-            if (!equalOperators.get(i).equalNullSafe(leftBlock, leftPosition, rightBlock, rightPosition)) {
+            if (!TypeUtils.positionEqualsPosition(type, leftBlock, leftPosition, rightBlock, rightPosition)) {
                 return false;
             }
         }
@@ -158,9 +151,11 @@ public class SimplePagesHashStrategy
     public boolean positionEqualsRow(int leftBlockIndex, int leftPosition, int rightPosition, Page rightPage)
     {
         for (int i = 0; i < hashChannels.size(); i++) {
-            Block leftBlock = channels.get(hashChannels.get(i)).get(leftBlockIndex);
+            int hashChannel = hashChannels.get(i);
+            Type type = types.get(hashChannel);
+            Block leftBlock = channels.get(hashChannel).get(leftBlockIndex);
             Block rightBlock = rightPage.getBlock(i);
-            if (!equalOperators.get(i).equalNullSafe(leftBlock, leftPosition, rightBlock, rightPosition)) {
+            if (!TypeUtils.positionEqualsPosition(type, leftBlock, leftPosition, rightBlock, rightPosition)) {
                 return false;
             }
         }
@@ -171,10 +166,26 @@ public class SimplePagesHashStrategy
     public boolean positionEqualsRowIgnoreNulls(int leftBlockIndex, int leftPosition, int rightPosition, Page rightPage)
     {
         for (int i = 0; i < hashChannels.size(); i++) {
-            BlockPositionEqual equalOperator = equalOperators.get(i);
-            Block leftBlock = channels.get(hashChannels.get(i)).get(leftBlockIndex);
+            int hashChannel = hashChannels.get(i);
+            Type type = types.get(hashChannel);
+            Block leftBlock = channels.get(hashChannel).get(leftBlockIndex);
             Block rightBlock = rightPage.getBlock(i);
-            if (!equalOperator.equal(leftBlock, leftPosition, rightBlock, rightPosition)) {
+            if (!type.equalTo(leftBlock, leftPosition, rightBlock, rightPosition)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public boolean positionEqualsRow(int leftBlockIndex, int leftPosition, int rightPosition, Page page, int[] rightHashChannels)
+    {
+        for (int i = 0; i < hashChannels.size(); i++) {
+            int hashChannel = hashChannels.get(i);
+            Type type = types.get(hashChannel);
+            Block leftBlock = channels.get(hashChannel).get(leftBlockIndex);
+            Block rightBlock = page.getBlock(rightHashChannels[i]);
+            if (!TypeUtils.positionEqualsPosition(type, leftBlock, leftPosition, rightBlock, rightPosition)) {
                 return false;
             }
         }
@@ -188,9 +199,14 @@ public class SimplePagesHashStrategy
             int hashChannel = hashChannels.get(i);
             Block leftBlock = channels.get(hashChannel).get(leftBlockIndex);
             Block rightBlock = page.getBlock(rightChannels[i]);
-            BlockPositionIsDistinctFrom isDistinctFromOperator = isDistinctFromOperators.get(i);
-            if (!isDistinctFromOperator.isDistinctFrom(leftBlock, leftPosition, rightBlock, rightPosition)) {
-                return false;
+            MethodHandle methodHandle = distinctFromMethodHandles.get(i);
+            try {
+                if (!(boolean) methodHandle.invokeExact(leftBlock, leftPosition, rightBlock, rightPosition)) {
+                    return false;
+                }
+            }
+            catch (Throwable t) {
+                throw internalError(t);
             }
         }
         return true;
@@ -199,11 +215,12 @@ public class SimplePagesHashStrategy
     @Override
     public boolean positionEqualsPosition(int leftBlockIndex, int leftPosition, int rightBlockIndex, int rightPosition)
     {
-        for (int i = 0; i < hashChannels.size(); i++) {
-            List<Block> channel = channels.get(hashChannels.get(i));
+        for (int hashChannel : hashChannels) {
+            Type type = types.get(hashChannel);
+            List<Block> channel = channels.get(hashChannel);
             Block leftBlock = channel.get(leftBlockIndex);
             Block rightBlock = channel.get(rightBlockIndex);
-            if (!equalOperators.get(i).equalNullSafe(leftBlock, leftPosition, rightBlock, rightPosition)) {
+            if (!TypeUtils.positionEqualsPosition(type, leftBlock, leftPosition, rightBlock, rightPosition)) {
                 return false;
             }
         }
@@ -213,11 +230,12 @@ public class SimplePagesHashStrategy
     @Override
     public boolean positionEqualsPositionIgnoreNulls(int leftBlockIndex, int leftPosition, int rightBlockIndex, int rightPosition)
     {
-        for (int i = 0; i < hashChannels.size(); i++) {
-            List<Block> channel = channels.get(hashChannels.get(i));
+        for (int hashChannel : hashChannels) {
+            Type type = types.get(hashChannel);
+            List<Block> channel = channels.get(hashChannel);
             Block leftBlock = channel.get(leftBlockIndex);
             Block rightBlock = channel.get(rightBlockIndex);
-            if (!equalOperators.get(i).equal(leftBlock, leftPosition, rightBlock, rightPosition)) {
+            if (!type.equalTo(leftBlock, leftPosition, rightBlock, rightPosition)) {
                 return false;
             }
         }
@@ -243,7 +261,7 @@ public class SimplePagesHashStrategy
         Block leftBlock = channels.get(channel).get(leftBlockIndex);
         Block rightBlock = channels.get(channel).get(rightBlockIndex);
 
-        return (int) comparisonOperators.get(channel).compare(leftBlock, leftBlockPosition, rightBlock, rightBlockPosition);
+        return types.get(channel).compareTo(leftBlock, leftBlockPosition, rightBlock, rightBlockPosition);
     }
 
     @Override

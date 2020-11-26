@@ -17,17 +17,30 @@ import io.airlift.configuration.Config;
 import io.prestosql.plugin.hive.HiveCompressionCodec;
 import org.apache.iceberg.FileFormat;
 
-import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Min;
 
 import static io.prestosql.plugin.hive.HiveCompressionCodec.GZIP;
 import static io.prestosql.plugin.iceberg.IcebergFileFormat.ORC;
 
 public class IcebergConfig
 {
+    private long metastoreTransactionCacheSize = 1000;
     private IcebergFileFormat fileFormat = ORC;
     private HiveCompressionCodec compressionCodec = GZIP;
 
-    @NotNull
+    @Min(1)
+    public long getMetastoreTransactionCacheSize()
+    {
+        return metastoreTransactionCacheSize;
+    }
+
+    @Config("iceberg.metastore.transaction-cache.size")
+    public IcebergConfig setMetastoreTransactionCacheSize(long metastoreTransactionCacheSize)
+    {
+        this.metastoreTransactionCacheSize = metastoreTransactionCacheSize;
+        return this;
+    }
+
     public FileFormat getFileFormat()
     {
         return FileFormat.valueOf(fileFormat.name());
@@ -40,7 +53,6 @@ public class IcebergConfig
         return this;
     }
 
-    @NotNull
     public HiveCompressionCodec getCompressionCodec()
     {
         return compressionCodec;

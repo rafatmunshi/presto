@@ -17,11 +17,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import io.prestosql.Session;
 import io.prestosql.operator.PagesIndex;
-import io.prestosql.spi.connector.SortOrder;
+import io.prestosql.spi.block.SortOrder;
 import io.prestosql.spi.type.RowType;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.gen.JoinCompiler;
-import io.prestosql.type.BlockTypeOperators;
 
 import java.util.List;
 import java.util.Optional;
@@ -113,7 +112,6 @@ public final class InternalAggregationFunction
                 null,
                 false,
                 null,
-                null,
                 ImmutableList.of(),
                 null);
     }
@@ -127,11 +125,10 @@ public final class InternalAggregationFunction
             PagesIndex.Factory pagesIndexFactory,
             boolean distinct,
             JoinCompiler joinCompiler,
-            BlockTypeOperators blockTypeOperators,
             List<LambdaProvider> lambdaProviders,
             Session session)
     {
-        return factory.bind(inputChannels, maskChannel, sourceTypes, orderByChannels, orderings, pagesIndexFactory, distinct, joinCompiler, blockTypeOperators, lambdaProviders, session);
+        return factory.bind(inputChannels, maskChannel, sourceTypes, orderByChannels, orderings, pagesIndexFactory, distinct, joinCompiler, lambdaProviders, session);
     }
 
     @VisibleForTesting

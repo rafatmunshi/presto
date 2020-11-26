@@ -19,7 +19,6 @@ import io.prestosql.spi.Page;
 import io.prestosql.spi.PageBuilder;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.gen.JoinCompiler;
-import io.prestosql.type.BlockTypeOperators;
 
 import java.util.List;
 import java.util.Optional;
@@ -36,10 +35,9 @@ public interface GroupByHash
             int[] hashChannels,
             Optional<Integer> inputHashChannel,
             int expectedSize,
-            JoinCompiler joinCompiler,
-            BlockTypeOperators blockTypeOperators)
+            JoinCompiler joinCompiler)
     {
-        return createGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, isDictionaryAggregationEnabled(session), joinCompiler, blockTypeOperators, NOOP);
+        return createGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, isDictionaryAggregationEnabled(session), joinCompiler, NOOP);
     }
 
     static GroupByHash createGroupByHash(
@@ -49,13 +47,12 @@ public interface GroupByHash
             int expectedSize,
             boolean processDictionary,
             JoinCompiler joinCompiler,
-            BlockTypeOperators blockTypeOperators,
             UpdateMemory updateMemory)
     {
         if (hashTypes.size() == 1 && hashTypes.get(0).equals(BIGINT) && hashChannels.length == 1) {
             return new BigintGroupByHash(hashChannels[0], inputHashChannel.isPresent(), expectedSize, updateMemory);
         }
-        return new MultiChannelGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, processDictionary, joinCompiler, blockTypeOperators, updateMemory);
+        return new MultiChannelGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, processDictionary, joinCompiler, updateMemory);
     }
 
     long getEstimatedSize();

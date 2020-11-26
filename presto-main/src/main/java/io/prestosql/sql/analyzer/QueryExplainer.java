@@ -22,7 +22,6 @@ import io.prestosql.execution.warnings.WarningCollector;
 import io.prestosql.metadata.Metadata;
 import io.prestosql.security.AccessControl;
 import io.prestosql.spi.PrestoException;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.parser.SqlParser;
 import io.prestosql.sql.planner.LogicalPlanner;
 import io.prestosql.sql.planner.Plan;
@@ -56,7 +55,6 @@ public class QueryExplainer
     private final List<PlanOptimizer> planOptimizers;
     private final PlanFragmenter planFragmenter;
     private final Metadata metadata;
-    private final TypeOperators typeOperators;
     private final AccessControl accessControl;
     private final SqlParser sqlParser;
     private final StatsCalculator statsCalculator;
@@ -68,7 +66,6 @@ public class QueryExplainer
             PlanOptimizers planOptimizers,
             PlanFragmenter planFragmenter,
             Metadata metadata,
-            TypeOperators typeOperators,
             AccessControl accessControl,
             SqlParser sqlParser,
             StatsCalculator statsCalculator,
@@ -79,7 +76,6 @@ public class QueryExplainer
                 planOptimizers.get(),
                 planFragmenter,
                 metadata,
-                typeOperators,
                 accessControl,
                 sqlParser,
                 statsCalculator,
@@ -91,7 +87,6 @@ public class QueryExplainer
             List<PlanOptimizer> planOptimizers,
             PlanFragmenter planFragmenter,
             Metadata metadata,
-            TypeOperators typeOperators,
             AccessControl accessControl,
             SqlParser sqlParser,
             StatsCalculator statsCalculator,
@@ -101,7 +96,6 @@ public class QueryExplainer
         this.planOptimizers = requireNonNull(planOptimizers, "planOptimizers is null");
         this.planFragmenter = requireNonNull(planFragmenter, "planFragmenter is null");
         this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
         this.accessControl = requireNonNull(accessControl, "accessControl is null");
         this.sqlParser = requireNonNull(sqlParser, "sqlParser is null");
         this.statsCalculator = requireNonNull(statsCalculator, "statsCalculator is null");
@@ -130,7 +124,7 @@ public class QueryExplainer
                 SubPlan subPlan = getDistributedPlan(session, statement, parameters, warningCollector);
                 return PlanPrinter.textDistributedPlan(subPlan, metadata, session, false);
             case IO:
-                return IoPlanPrinter.textIoPlan(getLogicalPlan(session, statement, parameters, warningCollector), metadata, typeOperators, session);
+                return IoPlanPrinter.textIoPlan(getLogicalPlan(session, statement, parameters, warningCollector), metadata, session);
         }
         throw new IllegalArgumentException("Unhandled plan type: " + planType);
     }
@@ -170,7 +164,7 @@ public class QueryExplainer
         switch (planType) {
             case IO:
                 Plan plan = getLogicalPlan(session, statement, parameters, warningCollector);
-                return textIoPlan(plan, metadata, typeOperators, session);
+                return textIoPlan(plan, metadata, session);
             default:
                 throw new PrestoException(NOT_SUPPORTED, format("Unsupported explain plan type %s for JSON format", planType));
         }
@@ -184,16 +178,7 @@ public class QueryExplainer
         PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
 
         // plan statement
-        LogicalPlanner logicalPlanner = new LogicalPlanner(
-                session,
-                planOptimizers,
-                idAllocator,
-                metadata,
-                typeOperators,
-                new TypeAnalyzer(sqlParser, metadata),
-                statsCalculator,
-                costCalculator,
-                warningCollector);
+        LogicalPlanner logicalPlanner = new LogicalPlanner(session, planOptimizers, idAllocator, metadata, new TypeAnalyzer(sqlParser, metadata), statsCalculator, costCalculator, warningCollector);
         return logicalPlanner.plan(analysis, OPTIMIZED_AND_VALIDATED, true);
     }
 

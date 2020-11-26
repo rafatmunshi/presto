@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.io.MoreFiles.deleteRecursively;
 import static com.google.common.io.RecursiveDeleteOption.ALLOW_INSECURE;
 import static io.prestosql.plugin.hive.HiveSessionProperties.InsertExistingPartitionsBehavior.APPEND;
@@ -39,7 +38,6 @@ import static java.nio.file.Files.createTempDirectory;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@Test(singleThreaded = true) // see @BeforeMethod
 public class TestHiveHadoop2Plugin
 {
     private Path tempDirectory;
@@ -67,75 +65,6 @@ public class TestHiveHadoop2Plugin
     }
 
     @Test
-    public void testCreateConnector()
-    {
-        Plugin plugin = new HiveHadoop2Plugin();
-        ConnectorFactory factory = getOnlyElement(plugin.getConnectorFactories());
-        // simplest possible configuration
-        factory.create("test", ImmutableMap.of("hive.metastore.uri", "thrift://foo:1234"), new TestingConnectorContext()).shutdown();
-    }
-
-    @Test
-    public void testThriftMetastore()
-    {
-        Plugin plugin = new HiveHadoop2Plugin();
-        ConnectorFactory factory = getOnlyElement(plugin.getConnectorFactories());
-        factory.create(
-                "test",
-                ImmutableMap.of(
-                        "hive.metastore", "thrift",
-                        "hive.metastore.uri", "thrift://foo:1234"),
-                new TestingConnectorContext())
-                .shutdown();
-    }
-
-    @Test
-    public void testGlueMetastore()
-    {
-        Plugin plugin = new HiveHadoop2Plugin();
-        ConnectorFactory factory = getOnlyElement(plugin.getConnectorFactories());
-        factory.create(
-                "test",
-                ImmutableMap.of(
-                        "hive.metastore", "glue",
-                        "hive.metastore.glue.region", "us-east-2"),
-                new TestingConnectorContext());
-
-        assertThatThrownBy(() -> factory.create(
-                "test",
-                ImmutableMap.of(
-                        "hive.metastore", "glue",
-                        "hive.metastore.uri", "thrift://foo:1234"),
-                new TestingConnectorContext()))
-                .hasMessageContaining("Error: Configuration property 'hive.metastore.uri' was not used");
-    }
-
-    @Test
-    public void testRecordingMetastore()
-    {
-        Plugin plugin = new HiveHadoop2Plugin();
-        ConnectorFactory factory = getOnlyElement(plugin.getConnectorFactories());
-
-        factory.create(
-                "test",
-                ImmutableMap.of(
-                        "hive.metastore", "thrift",
-                        "hive.metastore.uri", "thrift://foo:1234",
-                        "hive.metastore-recording-path", "/tmp"),
-                new TestingConnectorContext())
-                .shutdown();
-
-        factory.create(
-                "test",
-                ImmutableMap.of(
-                        "hive.metastore", "glue",
-                        "hive.metastore.glue.region", "us-east-2",
-                        "hive.metastore-recording-path", "/tmp"),
-                new TestingConnectorContext())
-                .shutdown();
-    }
-
-    @Test
     public void testS3SecurityMappingAndHiveCachingMutuallyExclusive()
             throws IOException
     {
@@ -151,8 +80,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .put("hive.cache.location", tempDirectory.toString())
                         .build(),
-                new TestingConnectorContext()))
-                .hasMessageContaining("S3 security mapping is not compatible with Hive caching");
+                new TestingConnectorContext())
+                .shutdown()).hasMessageContaining("S3 security mapping is not compatible with Hive caching");
     }
 
     @Test
@@ -169,7 +98,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .put("hive.cache.location", tempDirectory.toString())
                         .build(),
-                new TestingConnectorContext()))
+                new TestingConnectorContext())
+                .shutdown())
                 .hasMessageContaining("Use of GCS access token is not compatible with Hive caching");
     }
 
@@ -203,8 +133,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .build(),
                 new TestingConnectorContext());
+
         assertThat(getDefaultValueInsertExistingPartitionsBehavior(connector)).isEqualTo(ERROR);
-        connector.shutdown();
     }
 
     @Test
@@ -219,8 +149,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .build(),
                 new TestingConnectorContext());
+
         assertThat(getDefaultValueInsertExistingPartitionsBehavior(connector)).isEqualTo(APPEND);
-        connector.shutdown();
     }
 
     private Object getDefaultValueInsertExistingPartitionsBehavior(Connector connector)
@@ -246,7 +176,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .put("hive.cache.location", tempDirectory.toString())
                         .build(),
-                new TestingConnectorContext()))
+                new TestingConnectorContext())
+                .shutdown())
                 .hasMessageContaining("HDFS impersonation is not compatible with Hive caching");
     }
 
@@ -281,7 +212,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .put("hive.cache.location", "/tmp/non/existing/directory")
                         .build(),
-                new TestingConnectorContext()))
+                new TestingConnectorContext())
+                .shutdown())
                 .hasRootCauseMessage("None of the cache parent directories exists");
 
         assertThatThrownBy(() -> connectorFactory.create(
@@ -291,7 +223,8 @@ public class TestHiveHadoop2Plugin
                         .put("hive.cache.start-server-on-coordinator", "true")
                         .put("hive.metastore.uri", "thrift://foo:1234")
                         .build(),
-                new TestingConnectorContext()))
+                new TestingConnectorContext())
+                .shutdown())
                 .hasRootCauseMessage("caching directories were not provided");
 
         // cache directories should not be required when cache is not explicitly started on coordinator

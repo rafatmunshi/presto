@@ -18,7 +18,7 @@ import org.testng.annotations.Test;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.prestosql.testing.TestingSession.testSessionBuilder;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 public class TestCostComparator
@@ -69,15 +69,9 @@ public class TestCostComparator
     {
         CostComparator costComparator = new CostComparator(1.0, 1.0, 1.0);
         Session session = testSessionBuilder().build();
-        assertThatThrownBy(() -> costComparator.compare(session, PlanCostEstimate.zero(), PlanCostEstimate.unknown()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("cannot compare unknown costs");
-        assertThatThrownBy(() -> costComparator.compare(session, PlanCostEstimate.unknown(), PlanCostEstimate.zero()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("cannot compare unknown costs");
-        assertThatThrownBy(() -> costComparator.compare(session, PlanCostEstimate.unknown(), PlanCostEstimate.unknown()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("cannot compare unknown costs");
+        assertThrows(IllegalArgumentException.class, () -> costComparator.compare(session, PlanCostEstimate.zero(), PlanCostEstimate.unknown()));
+        assertThrows(IllegalArgumentException.class, () -> costComparator.compare(session, PlanCostEstimate.unknown(), PlanCostEstimate.zero()));
+        assertThrows(IllegalArgumentException.class, () -> costComparator.compare(session, PlanCostEstimate.unknown(), PlanCostEstimate.unknown()));
     }
 
     private static class CostComparisonAssertion

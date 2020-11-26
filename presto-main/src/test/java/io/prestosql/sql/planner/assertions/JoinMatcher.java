@@ -24,10 +24,9 @@ import io.prestosql.sql.planner.plan.FilterNode;
 import io.prestosql.sql.planner.plan.JoinNode;
 import io.prestosql.sql.planner.plan.JoinNode.DistributionType;
 import io.prestosql.sql.planner.plan.PlanNode;
-import io.prestosql.sql.tree.ComparisonExpression;
 import io.prestosql.sql.tree.Expression;
 
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,12 +34,11 @@ import java.util.Set;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static io.prestosql.sql.DynamicFilters.extractDynamicFilters;
 import static io.prestosql.sql.planner.ExpressionExtractor.extractExpressions;
 import static io.prestosql.sql.planner.assertions.MatchResult.NO_MATCH;
-import static io.prestosql.sql.planner.assertions.PlanMatchPattern.DynamicFilterPattern;
 import static io.prestosql.sql.planner.optimizations.PlanNodeSearcher.searchFrom;
 import static java.util.Objects.requireNonNull;
 
@@ -53,7 +51,7 @@ final class JoinMatcher
     private final Optional<DistributionType> distributionType;
     private final Optional<Boolean> spillable;
     // LEFT_SYMBOL -> RIGHT_SYMBOL
-    private final Optional<List<DynamicFilterPattern>> expectedDynamicFilter;
+    private final Optional<Map<SymbolAlias, SymbolAlias>> expectedDynamicFilterAliases;
 
     JoinMatcher(
             JoinNode.Type joinType,
@@ -61,14 +59,14 @@ final class JoinMatcher
             Optional<Expression> filter,
             Optional<DistributionType> distributionType,
             Optional<Boolean> spillable,
-            Optional<List<DynamicFilterPattern>> expectedDynamicFilter)
+            Optional<Map<SymbolAlias, SymbolAlias>> expectedDynamicFilterAliases)
     {
         this.joinType = requireNonNull(joinType, "joinType is null");
         this.equiCriteria = requireNonNull(equiCriteria, "equiCriteria is null");
         this.filter = requireNonNull(filter, "filter cannot be null");
         this.distributionType = requireNonNull(distributionType, "distributionType is null");
         this.spillable = requireNonNull(spillable, "spillable is null");
-        this.expectedDynamicFilter = requireNonNull(expectedDynamicFilter, "expectedDynamicFilter is null");
+        this.expectedDynamicFilterAliases = requireNonNull(expectedDynamicFilterAliases, "expectedDynamicFilterAliases is null");
     }
 
     @Override
@@ -134,33 +132,34 @@ final class JoinMatcher
 
     private boolean matchDynamicFilters(JoinNode joinNode, SymbolAliases symbolAliases)
     {
-        if (expectedDynamicFilter.isEmpty()) {
+        if (expectedDynamicFilterAliases.isEmpty()) {
             return true;
         }
         Set<DynamicFilterId> dynamicFilterIds = joinNode.getDynamicFilters().keySet();
-        List<DynamicFilters.Descriptor> descriptors = searchFrom(joinNode.getLeft())
+        Map<Symbol, DynamicFilterId> probeSymbolToFilterId = searchFrom(joinNode.getLeft())
                 .where(FilterNode.class::isInstance)
                 .findAll()
                 .stream()
                 .flatMap(filterNode -> extractExpressions(filterNode).stream())
                 .flatMap(expression -> extractDynamicFilters(expression).getDynamicConjuncts().stream())
                 .filter(descriptor -> dynamicFilterIds.contains(descriptor.getId()))
-                .collect(toImmutableList());
+                .collect(toImmutableMap(filter -> Symbol.from(filter.getInput()), DynamicFilters.Descriptor::getId));
 
         Map<DynamicFilterId, Symbol> idToBuildSymbolMap = joinNode.getDynamicFilters();
-        Set<Expression> actual = new HashSet<>();
-        for (DynamicFilters.Descriptor descriptor : descriptors) {
-            Symbol probe = Symbol.from(descriptor.getInput());
-            Symbol build = idToBuildSymbolMap.get(descriptor.getId());
+        Map<Symbol, Symbol> actual = new HashMap<>();
+        for (Map.Entry<Symbol, DynamicFilterId> entry : probeSymbolToFilterId.entrySet()) {
+            Symbol probe = entry.getKey();
+            DynamicFilterId id = entry.getValue();
+
+            Symbol build = idToBuildSymbolMap.get(id);
             if (build == null) {
                 return false;
             }
-            actual.add(new ComparisonExpression(descriptor.getOperator(), probe.toSymbolReference(), build.toSymbolReference()));
+            actual.put(probe, build);
         }
 
-        Set<Expression> expected = expectedDynamicFilter.get().stream()
-                .map(pattern -> pattern.getComparisonExpression(symbolAliases))
-                .collect(toImmutableSet());
+        Map<Symbol, Symbol> expected = expectedDynamicFilterAliases.get().entrySet().stream()
+                .collect(toImmutableMap(entry -> entry.getKey().toSymbol(symbolAliases), entry -> entry.getValue().toSymbol(symbolAliases)));
 
         return expected.equals(actual);
     }
@@ -174,7 +173,8 @@ final class JoinMatcher
                 .add("equiCriteria", equiCriteria)
                 .add("filter", filter.orElse(null))
                 .add("distributionType", distributionType)
-                .add("dynamicFilter", expectedDynamicFilter)
+                .add("dynamicFilter", expectedDynamicFilterAliases.map(aliases -> aliases.values().stream()
+                        .collect(toImmutableMap(rightSymbol -> rightSymbol.toString() + "_alias", SymbolAlias::toString))))
                 .toString();
     }
 }

@@ -63,7 +63,6 @@ public final class InternalIcebergConnectorFactory
                     new MBeanModule(),
                     new JsonModule(),
                     new IcebergModule(),
-                    new IcebergMetastoreModule(),
                     new HiveS3Module(),
                     new HiveAuthenticationModule(),
                     new HiveMetastoreModule(metastore),

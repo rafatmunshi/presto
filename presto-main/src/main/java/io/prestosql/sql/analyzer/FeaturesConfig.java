@@ -23,6 +23,9 @@ import io.airlift.configuration.LegacyConfig;
 import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
 import io.airlift.units.MaxDataSize;
+import io.prestosql.operator.aggregation.arrayagg.ArrayAggGroupImplementation;
+import io.prestosql.operator.aggregation.histogram.HistogramGroupImplementation;
+import io.prestosql.operator.aggregation.multimapagg.MultimapAggGroupImplementation;
 
 import javax.validation.constraints.DecimalMax;
 import javax.validation.constraints.DecimalMin;
@@ -41,23 +44,19 @@ import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
 @DefunctConfig({
-        "analyzer.experimental-syntax-enabled",
-        "arrayagg.implementation",
-        "deprecated.group-by-uses-equal",
         "deprecated.legacy-char-to-varchar-coercion",
-        "deprecated.legacy-join-using",
         "deprecated.legacy-map-subscript",
-        "deprecated.legacy-order-by",
+        "deprecated.group-by-uses-equal",
         "deprecated.legacy-row-field-ordinal-access",
-        "deprecated.legacy-timestamp",
         "deprecated.legacy-unnest-array-rows",
-        "experimental-syntax-enabled",
-        "experimental.resource-groups-enabled",
-        "fast-inequality-joins",
-        "histogram.implementation",
-        "multimapagg.implementation",
-        "optimizer.processing-optimization",
         "resource-group-manager",
+        "experimental.resource-groups-enabled",
+        "experimental-syntax-enabled",
+        "analyzer.experimental-syntax-enabled",
+        "optimizer.processing-optimization",
+        "deprecated.legacy-order-by",
+        "deprecated.legacy-join-using",
+        "deprecated.legacy-timestamp"
 })
 public class FeaturesConfig
 {
@@ -76,6 +75,7 @@ public class FeaturesConfig
     private boolean dynamicScheduleForGroupedExecution;
     private int concurrentLifespansPerTask;
     private boolean spatialJoinsEnabled = true;
+    private boolean fastInequalityJoins = true;
     private JoinReorderingStrategy joinReorderingStrategy = JoinReorderingStrategy.AUTOMATIC;
     private int maxReorderedJoins = 9;
     private boolean redistributeWrites = true;
@@ -101,6 +101,9 @@ public class FeaturesConfig
     private int re2JDfaStatesLimit = Integer.MAX_VALUE;
     private int re2JDfaRetries = 5;
     private RegexLibrary regexLibrary = JONI;
+    private HistogramGroupImplementation histogramGroupImplementation = HistogramGroupImplementation.NEW;
+    private ArrayAggGroupImplementation arrayAggGroupImplementation = ArrayAggGroupImplementation.NEW;
+    private MultimapAggGroupImplementation multimapAggGroupImplementation = MultimapAggGroupImplementation.NEW;
     private boolean spillEnabled;
     private boolean spillOrderBy = true;
     private boolean spillWindowOperator = true;
@@ -218,7 +221,6 @@ public class FeaturesConfig
     }
 
     @Config("deprecated.omit-datetime-type-precision")
-    @ConfigDescription("Enable compatibility mode for legacy clients when rendering datetime type names with default precision")
     public FeaturesConfig setOmitDateTimeTypePrecision(boolean value)
     {
         this.omitDateTimeTypePrecision = value;
@@ -316,6 +318,19 @@ public class FeaturesConfig
     {
         this.spatialJoinsEnabled = spatialJoinsEnabled;
         return this;
+    }
+
+    @Config("fast-inequality-joins")
+    @ConfigDescription("Use faster handling of inequality joins if it is possible")
+    public FeaturesConfig setFastInequalityJoins(boolean fastInequalityJoins)
+    {
+        this.fastInequalityJoins = fastInequalityJoins;
+        return this;
+    }
+
+    public boolean isFastInequalityJoins()
+    {
+        return fastInequalityJoins;
     }
 
     public JoinReorderingStrategy getJoinReorderingStrategy()
@@ -864,6 +879,42 @@ public class FeaturesConfig
     public FeaturesConfig setFilterAndProjectMinOutputPageRowCount(int filterAndProjectMinOutputPageRowCount)
     {
         this.filterAndProjectMinOutputPageRowCount = filterAndProjectMinOutputPageRowCount;
+        return this;
+    }
+
+    @Config("histogram.implementation")
+    public FeaturesConfig setHistogramGroupImplementation(HistogramGroupImplementation groupByMode)
+    {
+        this.histogramGroupImplementation = groupByMode;
+        return this;
+    }
+
+    public HistogramGroupImplementation getHistogramGroupImplementation()
+    {
+        return histogramGroupImplementation;
+    }
+
+    public ArrayAggGroupImplementation getArrayAggGroupImplementation()
+    {
+        return arrayAggGroupImplementation;
+    }
+
+    @Config("arrayagg.implementation")
+    public FeaturesConfig setArrayAggGroupImplementation(ArrayAggGroupImplementation groupByMode)
+    {
+        this.arrayAggGroupImplementation = groupByMode;
+        return this;
+    }
+
+    public MultimapAggGroupImplementation getMultimapAggGroupImplementation()
+    {
+        return multimapAggGroupImplementation;
+    }
+
+    @Config("multimapagg.implementation")
+    public FeaturesConfig setMultimapAggGroupImplementation(MultimapAggGroupImplementation groupByMode)
+    {
+        this.multimapAggGroupImplementation = groupByMode;
         return this;
     }
 

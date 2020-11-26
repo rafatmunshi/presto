@@ -24,7 +24,6 @@ import io.prestosql.spi.predicate.TupleDomain;
 import io.prestosql.spi.type.ArrayType;
 import io.prestosql.spi.type.MapType;
 import io.prestosql.spi.type.RowType;
-import io.prestosql.spi.type.TypeOperators;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
@@ -39,6 +38,7 @@ import static io.prestosql.parquet.ParquetTypeUtils.getDescriptors;
 import static io.prestosql.plugin.hive.HiveColumnHandle.ColumnType.REGULAR;
 import static io.prestosql.plugin.hive.HiveColumnHandle.createBaseColumn;
 import static io.prestosql.plugin.hive.parquet.ParquetPageSourceFactory.getParquetTupleDomain;
+import static io.prestosql.spi.block.MethodHandleUtil.methodHandle;
 import static io.prestosql.spi.predicate.TupleDomain.withColumnDomains;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.IntegerType.INTEGER;
@@ -131,7 +131,13 @@ public class TestParquetPredicateUtils
     @Test
     public void testParquetTupleDomainMap()
     {
-        MapType mapType = new MapType(INTEGER, INTEGER, new TypeOperators());
+        MapType mapType = new MapType(
+                INTEGER,
+                INTEGER,
+                methodHandle(TestParquetPredicateUtils.class, "throwUnsupportedOperationException"),
+                methodHandle(TestParquetPredicateUtils.class, "throwUnsupportedOperationException"),
+                methodHandle(TestParquetPredicateUtils.class, "throwUnsupportedOperationException"),
+                methodHandle(TestParquetPredicateUtils.class, "throwUnsupportedOperationException"));
 
         HiveColumnHandle columnHandle = createBaseColumn("my_map", 0, HiveType.valueOf("map<int,int>"), mapType, REGULAR, Optional.empty());
 
@@ -146,5 +152,10 @@ public class TestParquetPredicateUtils
         Map<List<String>, RichColumnDescriptor> descriptorsByPath = getDescriptors(fileSchema, fileSchema);
         TupleDomain<ColumnDescriptor> tupleDomain = getParquetTupleDomain(descriptorsByPath, domain, fileSchema, true);
         assertTrue(tupleDomain.isAll());
+    }
+
+    public static void throwUnsupportedOperationException()
+    {
+        throw new UnsupportedOperationException();
     }
 }

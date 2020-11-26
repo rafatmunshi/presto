@@ -28,7 +28,6 @@ import io.prestosql.metadata.ResolvedFunction;
 import io.prestosql.metadata.ResolvedIndex;
 import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.predicate.TupleDomain;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.DomainTranslator;
 import io.prestosql.sql.planner.PlanNodeIdAllocator;
 import io.prestosql.sql.planner.Symbol;
@@ -74,12 +73,10 @@ public class IndexJoinOptimizer
         implements PlanOptimizer
 {
     private final Metadata metadata;
-    private final TypeOperators typeOperators;
 
-    public IndexJoinOptimizer(Metadata metadata, TypeOperators typeOperators)
+    public IndexJoinOptimizer(Metadata metadata)
     {
         this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
     }
 
     @Override
@@ -90,7 +87,7 @@ public class IndexJoinOptimizer
         requireNonNull(symbolAllocator, "symbolAllocator is null");
         requireNonNull(idAllocator, "idAllocator is null");
 
-        return SimplePlanRewriter.rewriteWith(new Rewriter(symbolAllocator, idAllocator, metadata, typeOperators, session), plan, null);
+        return SimplePlanRewriter.rewriteWith(new Rewriter(symbolAllocator, idAllocator, metadata, session), plan, null);
     }
 
     private static class Rewriter
@@ -99,20 +96,13 @@ public class IndexJoinOptimizer
         private final SymbolAllocator symbolAllocator;
         private final PlanNodeIdAllocator idAllocator;
         private final Metadata metadata;
-        private final TypeOperators typeOperators;
         private final Session session;
 
-        private Rewriter(
-                SymbolAllocator symbolAllocator,
-                PlanNodeIdAllocator idAllocator,
-                Metadata metadata,
-                TypeOperators typeOperators,
-                Session session)
+        private Rewriter(SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator, Metadata metadata, Session session)
         {
             this.symbolAllocator = requireNonNull(symbolAllocator, "symbolAllocator is null");
             this.idAllocator = requireNonNull(idAllocator, "idAllocator is null");
             this.metadata = requireNonNull(metadata, "metadata is null");
-            this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
             this.session = requireNonNull(session, "session is null");
         }
 
@@ -132,7 +122,6 @@ public class IndexJoinOptimizer
                         symbolAllocator,
                         idAllocator,
                         metadata,
-                        typeOperators,
                         session);
                 if (leftIndexCandidate.isPresent()) {
                     // Sanity check that we can trace the path for the index lookup key
@@ -146,7 +135,6 @@ public class IndexJoinOptimizer
                         symbolAllocator,
                         idAllocator,
                         metadata,
-                        typeOperators,
                         session);
                 if (rightIndexCandidate.isPresent()) {
                     // Sanity check that we can trace the path for the index lookup key
@@ -255,22 +243,15 @@ public class IndexJoinOptimizer
         private final SymbolAllocator symbolAllocator;
         private final PlanNodeIdAllocator idAllocator;
         private final Metadata metadata;
-        private final TypeOperators typeOperators;
         private final DomainTranslator domainTranslator;
         private final Session session;
 
-        private IndexSourceRewriter(
-                SymbolAllocator symbolAllocator,
-                PlanNodeIdAllocator idAllocator,
-                Metadata metadata,
-                TypeOperators typeOperators,
-                Session session)
+        private IndexSourceRewriter(SymbolAllocator symbolAllocator, PlanNodeIdAllocator idAllocator, Metadata metadata, Session session)
         {
             this.metadata = requireNonNull(metadata, "metadata is null");
             this.domainTranslator = new DomainTranslator(metadata);
             this.symbolAllocator = requireNonNull(symbolAllocator, "symbolAllocator is null");
             this.idAllocator = requireNonNull(idAllocator, "idAllocator is null");
-            this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
             this.session = requireNonNull(session, "session is null");
         }
 
@@ -280,11 +261,10 @@ public class IndexJoinOptimizer
                 SymbolAllocator symbolAllocator,
                 PlanNodeIdAllocator idAllocator,
                 Metadata metadata,
-                TypeOperators typeOperators,
                 Session session)
         {
             AtomicBoolean success = new AtomicBoolean();
-            IndexSourceRewriter indexSourceRewriter = new IndexSourceRewriter(symbolAllocator, idAllocator, metadata, typeOperators, session);
+            IndexSourceRewriter indexSourceRewriter = new IndexSourceRewriter(symbolAllocator, idAllocator, metadata, session);
             PlanNode rewritten = SimplePlanRewriter.rewriteWith(indexSourceRewriter, planNode, new Context(lookupSymbols, success));
             if (success.get()) {
                 return Optional.of(rewritten);
@@ -309,7 +289,6 @@ public class IndexJoinOptimizer
         {
             DomainTranslator.ExtractionResult decomposedPredicate = DomainTranslator.fromPredicate(
                     metadata,
-                    typeOperators,
                     session,
                     predicate,
                     symbolAllocator.getTypes());

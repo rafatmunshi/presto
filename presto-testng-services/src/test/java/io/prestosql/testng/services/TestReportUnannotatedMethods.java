@@ -22,7 +22,6 @@ import org.testng.annotations.Test;
 
 import java.lang.reflect.Method;
 
-import static io.prestosql.testng.services.ReportUnannotatedMethods.findUnannotatedTestMethods;
 import static io.prestosql.testng.services.ReportUnannotatedMethods.isTemptoClass;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.testng.Assert.assertFalse;
@@ -30,19 +29,21 @@ import static org.testng.Assert.assertTrue;
 
 public class TestReportUnannotatedMethods
 {
+    private final ReportUnannotatedMethods instance = new ReportUnannotatedMethods();
+
     @Test
     public void testTest()
     {
-        assertThat(findUnannotatedTestMethods(TestingTest.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingTest.class))
                 .isEmpty();
-        assertThat(findUnannotatedTestMethods(TestingTestWithProxy.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingTestWithProxy.class))
                 .isEmpty();
     }
 
     @Test
     public void testTestWithoutTestAnnotation()
     {
-        assertThat(findUnannotatedTestMethods(TestingTestWithoutTestAnnotation.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingTestWithoutTestAnnotation.class))
                 .extracting(Method::getName)
                 .containsExactly("testWithMissingTestAnnotation", "methodInInterface");
     }
@@ -50,10 +51,10 @@ public class TestReportUnannotatedMethods
     @Test
     public void testTemptoRequirementsProvider()
     {
-        assertThat(findUnannotatedTestMethods(TestingRequirementsProvider.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingRequirementsProvider.class))
                 .extracting(Method::getName)
                 .containsExactly("testWithMissingTestAnnotation");
-        assertThat(findUnannotatedTestMethods(TestingRequirementsProviderWithProxyClass.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingRequirementsProviderWithProxyClass.class))
                 .extracting(Method::getName)
                 .containsExactly("testWithMissingTestAnnotation", "testWithMissingTestAnnotationInProxy");
     }
@@ -69,9 +70,9 @@ public class TestReportUnannotatedMethods
     @Test
     public void testSuppressedMethods()
     {
-        assertThat(findUnannotatedTestMethods(TestingTestWithSuppressedPublicMethod.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingTestWithSuppressedPublicMethod.class))
                 .isEmpty();
-        assertThat(findUnannotatedTestMethods(TestingTestWithSuppressedPublicMethodInInterface.class))
+        assertThat(instance.findUnannotatedTestMethods(TestingTestWithSuppressedPublicMethodInInterface.class))
                 .isEmpty();
     }
 

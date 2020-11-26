@@ -32,6 +32,13 @@ import static io.airlift.configuration.ConfigBinder.configBinder;
 public class BigQueryConnectorModule
         implements Module
 {
+    private final NodeManager nodeManager;
+
+    public BigQueryConnectorModule(NodeManager nodeManager)
+    {
+        this.nodeManager = nodeManager;
+    }
+
     @Provides
     @Singleton
     public static HeaderProvider createHeaderProvider(NodeManager nodeManager)

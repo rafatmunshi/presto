@@ -48,5 +48,8 @@ public abstract class TypeCoercer<F extends Type, T extends Type>
         return blockBuilder.build();
     }
 
-    protected abstract void applyCoercedValue(BlockBuilder blockBuilder, Block block, int position);
+    protected void applyCoercedValue(BlockBuilder blockBuilder, Block block, int position)
+    {
+        throw new UnsupportedOperationException();
+    }
 }

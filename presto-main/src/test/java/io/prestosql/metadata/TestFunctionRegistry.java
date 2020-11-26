@@ -15,7 +15,6 @@ package io.prestosql.metadata;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import io.prestosql.operator.scalar.ChoicesScalarFunctionImplementation;
 import io.prestosql.operator.scalar.CustomFunctions;
 import io.prestosql.operator.scalar.ScalarFunctionImplementation;
 import io.prestosql.spi.function.OperatorType;
@@ -363,8 +362,7 @@ public class TestFunctionRegistry
                     @Override
                     protected ScalarFunctionImplementation specialize(FunctionBinding functionBinding)
                     {
-                        return new ChoicesScalarFunctionImplementation(
-                                functionBinding,
+                        return new ScalarFunctionImplementation(
                                 FAIL_ON_NULL,
                                 nCopies(functionBinding.getArity(), NEVER_NULL),
                                 MethodHandles.identity(Void.class));

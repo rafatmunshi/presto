@@ -23,7 +23,7 @@ import io.prestosql.testing.LocalQueryRunner;
 import java.util.List;
 
 import static io.prestosql.benchmark.BenchmarkQueryRunner.createLocalQueryRunner;
-import static io.prestosql.spi.connector.SortOrder.ASC_NULLS_LAST;
+import static io.prestosql.spi.block.SortOrder.ASC_NULLS_LAST;
 
 public class Top100Benchmark
         extends AbstractSimpleOperatorBenchmark
@@ -44,8 +44,7 @@ public class Top100Benchmark
                 tableScanTypes,
                 100,
                 ImmutableList.of(0),
-                ImmutableList.of(ASC_NULLS_LAST),
-                localQueryRunner.getTypeOperators());
+                ImmutableList.of(ASC_NULLS_LAST));
         return ImmutableList.of(tableScanOperator, topNOperator);
     }
 

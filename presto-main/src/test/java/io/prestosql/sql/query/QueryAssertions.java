@@ -43,7 +43,6 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-import static com.google.common.base.Preconditions.checkState;
 import static io.airlift.testing.Assertions.assertEqualsIgnoreOrder;
 import static io.prestosql.sql.planner.assertions.PlanAssert.assertPlan;
 import static io.prestosql.sql.query.QueryAssertions.ExpressionAssert.newExpressionAssert;
@@ -223,7 +222,7 @@ public class QueryAssertions
                     MaterializedRow row = (MaterializedRow) object;
 
                     return row.getFields().stream()
-                            .map(String::valueOf)
+                            .map(Object::toString)
                             .collect(Collectors.joining(", ", "(", ")"));
                 }
                 else {
@@ -299,10 +298,8 @@ public class QueryAssertions
         /**
          * Verifies query is fully pushed down and verifies the results are the same as when the pushdown is disabled.
          */
-        public QueryAssert isFullyPushedDown()
+        public QueryAssert isCorrectlyPushedDown()
         {
-            checkState(!(runner instanceof LocalQueryRunner), "testIsFullyPushedDown() currently does not work with LocalQueryRunner");
-
             // Compare the results with pushdown disabled, so that explicit matches() call is not needed
             verifyResultsWithPushdownDisabled();
 
@@ -325,7 +322,7 @@ public class QueryAssertions
         /**
          * Verifies query is not fully pushed down and verifies the results are the same as when the pushdown is fully disabled.
          * <p>
-         * <b>Note:</b> the primary intent of this assertion is to ensure the test is updated to {@link #isFullyPushedDown()}
+         * <b>Note:</b> the primary intent of this assertion is to ensure the test is updated to {@link #isCorrectlyPushedDown()}
          * when pushdown capabilities are improved.
          */
         public QueryAssert isNotFullyPushedDown(Class<? extends PlanNode> retainedNode)

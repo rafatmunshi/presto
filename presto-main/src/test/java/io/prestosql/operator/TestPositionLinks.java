@@ -16,8 +16,6 @@ package io.prestosql.operator;
 import com.google.common.collect.ImmutableList;
 import io.prestosql.RowPagesBuilder;
 import io.prestosql.spi.Page;
-import io.prestosql.spi.type.TypeOperators;
-import io.prestosql.type.BlockTypeOperators;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import org.testng.annotations.Test;
 
@@ -25,6 +23,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
+import static io.prestosql.metadata.MetadataManager.createTestMetadataManager;
 import static io.prestosql.operator.SyntheticAddress.encodeSyntheticAddress;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static org.testng.Assert.assertEquals;
@@ -315,7 +314,7 @@ public class TestPositionLinks
                 ImmutableList.of(),
                 OptionalInt.empty(),
                 Optional.of(0),
-                new BlockTypeOperators(new TypeOperators()));
+                createTestMetadataManager());
     }
 
     private static LongArrayList addresses()

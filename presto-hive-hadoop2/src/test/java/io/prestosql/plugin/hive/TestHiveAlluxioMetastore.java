@@ -16,7 +16,6 @@ package io.prestosql.plugin.hive;
 import alluxio.client.table.TableMasterClient;
 import alluxio.conf.PropertyKey;
 import io.prestosql.plugin.hive.authentication.NoHdfsAuthentication;
-import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.alluxio.AlluxioHiveMetastore;
 import io.prestosql.plugin.hive.metastore.alluxio.AlluxioHiveMetastoreConfig;
 import io.prestosql.plugin.hive.metastore.alluxio.AlluxioMetastoreModule;
@@ -61,7 +60,7 @@ public class TestHiveAlluxioMetastore
         alluxioConfig.setMasterAddress(this.alluxioAddress);
         TableMasterClient client = AlluxioMetastoreModule.createCatalogMasterClient(alluxioConfig);
         hdfsEnvironment = new HdfsEnvironment(createTestHdfsConfiguration(), new HdfsConfig(), new NoHdfsAuthentication());
-        setup(SCHEMA, hiveConfig, new AlluxioHiveMetastore(client, new MetastoreConfig()), hdfsEnvironment);
+        setup(SCHEMA, hiveConfig, new AlluxioHiveMetastore(client), hdfsEnvironment);
     }
 
     private int getHiveVersionMajor()
@@ -147,10 +146,9 @@ public class TestHiveAlluxioMetastore
     }
 
     @Override
-    public void testHideDeltaLakeTables()
+    public void testHiveViewsAreNotSupported()
     {
-        // Alluxio metastore does not support create operations
-        throw new SkipException("not supported");
+        // Alluxio metastore does not support insert/update operations
     }
 
     @Override

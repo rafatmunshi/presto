@@ -16,28 +16,18 @@ package io.prestosql.operator.aggregation.histogram;
 
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators.BlockPositionEqual;
-import io.prestosql.type.BlockTypeOperators.BlockPositionHashCode;
 import org.openjdk.jol.info.ClassLayout;
-
-import static java.util.Objects.requireNonNull;
 
 public class SingleHistogramState
         implements HistogramState
 {
     private static final int INSTANCE_SIZE = ClassLayout.parseClass(SingleHistogramState.class).instanceSize();
 
-    private final Type keyType;
-    private final BlockPositionEqual equalOperator;
-    private final BlockPositionHashCode hashCodeOperator;
     private SingleTypedHistogram typedHistogram;
 
-    public SingleHistogramState(Type keyType, BlockPositionEqual equalOperator, BlockPositionHashCode hashCodeOperator, int expectedEntriesCount)
+    public SingleHistogramState(Type keyType, int expectedEntriesCount)
     {
-        this.keyType = requireNonNull(keyType, "keyType is null");
-        this.equalOperator = requireNonNull(equalOperator, "equalOperator is null");
-        this.hashCodeOperator = requireNonNull(hashCodeOperator, "hashCodeOperator is null");
-        typedHistogram = new SingleTypedHistogram(keyType, equalOperator, hashCodeOperator, expectedEntriesCount);
+        typedHistogram = new SingleTypedHistogram(keyType, expectedEntriesCount);
     }
 
     @Override
@@ -47,9 +37,9 @@ public class SingleHistogramState
     }
 
     @Override
-    public void deserialize(Block block, int expectedSize)
+    public void deserialize(Block block, Type type, int expectedSize)
     {
-        typedHistogram = new SingleTypedHistogram(block, keyType, equalOperator, hashCodeOperator, expectedSize);
+        typedHistogram = new SingleTypedHistogram(block, type, expectedSize);
     }
 
     @Override

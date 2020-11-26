@@ -28,12 +28,10 @@ import io.prestosql.operator.PagesIndex;
 import io.prestosql.operator.PartitionedLookupSourceFactory;
 import io.prestosql.operator.TaskContext;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spiller.SingleStreamSpillerFactory;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.testing.LocalQueryRunner;
 import io.prestosql.testing.NullOutputOperator.NullOutputOperatorFactory;
-import io.prestosql.type.BlockTypeOperators;
 
 import java.util.List;
 import java.util.Optional;
@@ -68,7 +66,6 @@ public class HashJoinBenchmark
         if (probeDriverFactory == null) {
             List<Type> ordersTypes = getColumnTypes("orders", "orderkey", "totalprice");
             OperatorFactory ordersTableScan = createTableScanOperator(0, new PlanNodeId("test"), "orders", "orderkey", "totalprice");
-            BlockTypeOperators blockTypeOperators = new BlockTypeOperators(new TypeOperators());
             JoinBridgeManager<PartitionedLookupSourceFactory> lookupSourceFactoryManager = JoinBridgeManager.lookupAllAtOnce(new PartitionedLookupSourceFactory(
                     ordersTypes,
                     ImmutableList.of(0, 1).stream()
@@ -78,8 +75,7 @@ public class HashJoinBenchmark
                             .map(ordersTypes::get)
                             .collect(toImmutableList()),
                     1,
-                    false,
-                    blockTypeOperators));
+                    false));
             HashBuilderOperatorFactory hashBuilder = new HashBuilderOperatorFactory(
                     1,
                     new PlanNodeId("test"),
@@ -100,17 +96,7 @@ public class HashJoinBenchmark
 
             List<Type> lineItemTypes = getColumnTypes("lineitem", "orderkey", "quantity");
             OperatorFactory lineItemTableScan = createTableScanOperator(0, new PlanNodeId("test"), "lineitem", "orderkey", "quantity");
-            OperatorFactory joinOperator = LOOKUP_JOIN_OPERATORS.innerJoin(
-                    1,
-                    new PlanNodeId("test"),
-                    lookupSourceFactoryManager,
-                    lineItemTypes,
-                    Ints.asList(0),
-                    OptionalInt.empty(),
-                    Optional.empty(),
-                    OptionalInt.empty(),
-                    unsupportedPartitioningSpillerFactory(),
-                    blockTypeOperators);
+            OperatorFactory joinOperator = LOOKUP_JOIN_OPERATORS.innerJoin(1, new PlanNodeId("test"), lookupSourceFactoryManager, lineItemTypes, Ints.asList(0), OptionalInt.empty(), Optional.empty(), OptionalInt.empty(), unsupportedPartitioningSpillerFactory());
             NullOutputOperatorFactory output = new NullOutputOperatorFactory(2, new PlanNodeId("test"));
             this.probeDriverFactory = new DriverFactory(1, true, true, ImmutableList.of(lineItemTableScan, joinOperator, output), OptionalInt.empty(), UNGROUPED_EXECUTION);
 

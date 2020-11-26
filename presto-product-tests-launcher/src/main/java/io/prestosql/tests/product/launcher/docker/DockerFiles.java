@@ -60,33 +60,22 @@ public final class DockerFiles
         closed = true;
     }
 
-    public synchronized Path getDockerFilesHostPath()
+    public synchronized String getDockerFilesHostPath()
     {
         checkState(!closed, "Already closed");
         if (dockerFilesHostPath == null) {
             dockerFilesHostPath = unpackDockerFilesFromClasspath();
             verify(dockerFilesHostPath != null);
         }
-        return dockerFilesHostPath;
+        return dockerFilesHostPath.toString();
     }
 
-    public ResourceProvider getDockerFilesHostDirectory(String directory)
+    public String getDockerFilesHostPath(String file)
     {
-        Path hostPath = getDockerFilesHostPath(directory);
-        return file -> {
-            checkArgument(file != null && !file.isEmpty() && !(file.charAt(0) == '/'), "Invalid file: %s", file);
-            Path filePath = hostPath.resolve(file);
-            checkArgument(Files.exists(filePath), "'%s' resolves to '%s', but it does not exist", file, filePath);
-            return filePath;
-        };
-    }
-
-    public Path getDockerFilesHostPath(String file)
-    {
-        checkArgument(file != null && !file.isEmpty() && !(file.charAt(0) == '/'), "Invalid file: %s", file);
-        Path filePath = getDockerFilesHostPath().resolve(file);
+        checkArgument(file != null && !file.isEmpty() && !file.startsWith("/"), "Invalid file: %s", file);
+        Path filePath = Paths.get(getDockerFilesHostPath()).resolve(file);
         checkArgument(Files.exists(filePath), "'%s' resolves to '%s', but it does not exist", file, filePath);
-        return filePath;
+        return filePath.toString();
     }
 
     private static Path unpackDockerFilesFromClasspath()
@@ -120,15 +109,10 @@ public final class DockerFiles
     }
 
     public static Path createTemporaryDirectoryForDocker()
+            throws IOException
     {
-        Path temporaryDirectoryForDocker;
-        try {
-            // Cannot use Files.createTempDirectory() because on Mac by default it uses /var/folders/ which is not visible to Docker for Mac
-            temporaryDirectoryForDocker = Files.createDirectory(Paths.get("/tmp/docker-files-" + randomUUID().toString()));
-        }
-        catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        // Cannot use Files.createTempDirectory() because on Mac by default it uses /var/folders/ which is not visible to Docker for Mac
+        Path temporaryDirectoryForDocker = Files.createDirectory(Paths.get("/tmp/docker-files-" + randomUUID().toString()));
 
         // Best-effort cleanup
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -140,10 +124,5 @@ public final class DockerFiles
             }
         }));
         return temporaryDirectoryForDocker;
-    }
-
-    public interface ResourceProvider
-    {
-        Path getPath(String resourceName);
     }
 }

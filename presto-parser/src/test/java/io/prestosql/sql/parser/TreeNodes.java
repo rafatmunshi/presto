@@ -39,9 +39,9 @@ class TreeNodes
 {
     private TreeNodes() {}
 
-    public static NodeLocation location(int line, int column)
+    public static NodeLocation location(int line, int charPositionInLine)
     {
-        return new NodeLocation(line, column);
+        return new NodeLocation(line, charPositionInLine);
     }
 
     public static Identifier identifier(NodeLocation location, String name)

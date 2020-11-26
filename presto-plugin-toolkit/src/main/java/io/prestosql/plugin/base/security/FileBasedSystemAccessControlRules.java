@@ -22,15 +22,13 @@ import java.util.Optional;
 
 public class FileBasedSystemAccessControlRules
 {
-    private final Optional<List<CatalogAccessControlRule>> catalogRules;
+    private final List<CatalogAccessControlRule> catalogRules;
     private final Optional<List<QueryAccessRule>> queryAccessRules;
     private final Optional<List<ImpersonationRule>> impersonationRules;
     private final Optional<List<PrincipalUserMatchRule>> principalUserMatchRules;
     private final Optional<List<SystemInformationRule>> systemInformationRules;
-    private final Optional<List<CatalogSchemaAccessControlRule>> schemaRules;
-    private final Optional<List<CatalogTableAccessControlRule>> tableRules;
-    private final Optional<List<SessionPropertyAccessControlRule>> sessionPropertyRules;
-    private final Optional<List<CatalogSessionPropertyAccessControlRule>> catalogSessionPropertyRules;
+    private final Optional<List<SchemaAccessControlRule>> schemaRules;
+    private final Optional<List<TableAccessControlRule>> tableRules;
 
     @JsonCreator
     public FileBasedSystemAccessControlRules(
@@ -39,23 +37,19 @@ public class FileBasedSystemAccessControlRules
             @JsonProperty("impersonation") Optional<List<ImpersonationRule>> impersonationRules,
             @JsonProperty("principals") Optional<List<PrincipalUserMatchRule>> principalUserMatchRules,
             @JsonProperty("system_information") Optional<List<SystemInformationRule>> systemInformationRules,
-            @JsonProperty("schemas") Optional<List<CatalogSchemaAccessControlRule>> schemaAccessControlRules,
-            @JsonProperty("tables") Optional<List<CatalogTableAccessControlRule>> tableAccessControlRules,
-            @JsonProperty("system_session_properties") Optional<List<SessionPropertyAccessControlRule>> sessionPropertyRules,
-            @JsonProperty("catalog_session_properties") Optional<List<CatalogSessionPropertyAccessControlRule>> catalogSessionPropertyRules)
+            @JsonProperty("schemas") Optional<List<SchemaAccessControlRule>> schemaAccessControlRules,
+            @JsonProperty("tables") Optional<List<TableAccessControlRule>> tableAccessControlRules)
     {
-        this.catalogRules = catalogRules.map(ImmutableList::copyOf);
+        this.catalogRules = catalogRules.map(ImmutableList::copyOf).orElse(ImmutableList.of());
         this.queryAccessRules = queryAccessRules.map(ImmutableList::copyOf);
         this.principalUserMatchRules = principalUserMatchRules.map(ImmutableList::copyOf);
         this.impersonationRules = impersonationRules.map(ImmutableList::copyOf);
         this.systemInformationRules = systemInformationRules.map(ImmutableList::copyOf);
         this.schemaRules = schemaAccessControlRules.map(ImmutableList::copyOf);
         this.tableRules = tableAccessControlRules.map(ImmutableList::copyOf);
-        this.sessionPropertyRules = sessionPropertyRules;
-        this.catalogSessionPropertyRules = catalogSessionPropertyRules;
     }
 
-    public Optional<List<CatalogAccessControlRule>> getCatalogRules()
+    public List<CatalogAccessControlRule> getCatalogRules()
     {
         return catalogRules;
     }
@@ -80,23 +74,13 @@ public class FileBasedSystemAccessControlRules
         return systemInformationRules;
     }
 
-    public Optional<List<CatalogSchemaAccessControlRule>> getSchemaRules()
+    public Optional<List<SchemaAccessControlRule>> getSchemaRules()
     {
         return schemaRules;
     }
 
-    public Optional<List<CatalogTableAccessControlRule>> getTableRules()
+    public Optional<List<TableAccessControlRule>> getTableRules()
     {
         return tableRules;
-    }
-
-    public Optional<List<SessionPropertyAccessControlRule>> getSessionPropertyRules()
-    {
-        return sessionPropertyRules;
-    }
-
-    public Optional<List<CatalogSessionPropertyAccessControlRule>> getCatalogSessionPropertyRules()
-    {
-        return catalogSessionPropertyRules;
     }
 }

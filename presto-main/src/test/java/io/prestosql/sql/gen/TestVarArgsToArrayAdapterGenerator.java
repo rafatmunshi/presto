@@ -22,7 +22,6 @@ import io.prestosql.metadata.FunctionMetadata;
 import io.prestosql.metadata.Signature;
 import io.prestosql.metadata.SqlScalarFunction;
 import io.prestosql.operator.scalar.AbstractTestFunctions;
-import io.prestosql.operator.scalar.ChoicesScalarFunctionImplementation;
 import io.prestosql.operator.scalar.ScalarFunctionImplementation;
 import io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention;
 import org.testng.annotations.BeforeClass;
@@ -102,8 +101,7 @@ public class TestVarArgsToArrayAdapterGenerator
                     functionBinding.getArity(),
                     METHOD_HANDLE,
                     USER_STATE_FACTORY);
-            return new ChoicesScalarFunctionImplementation(
-                    functionBinding,
+            return new ScalarFunctionImplementation(
                     InvocationReturnConvention.FAIL_ON_NULL,
                     nCopies(functionBinding.getArity(), NEVER_NULL),
                     methodHandleAndConstructor.getMethodHandle(),

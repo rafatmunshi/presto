@@ -42,6 +42,7 @@ public class GeoPlugin
     {
         return ImmutableSet.<Class<?>>builder()
                 .add(GeoFunctions.class)
+                .add(BingTileOperators.class)
                 .add(BingTileFunctions.class)
                 .add(BingTileCoordinatesFunction.class)
                 .add(ConvexHullAggregation.class)

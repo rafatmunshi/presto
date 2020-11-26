@@ -25,6 +25,7 @@ import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static io.prestosql.SystemSessionProperties.isFastInequalityJoin;
 import static io.prestosql.operator.JoinUtils.channelsToPages;
 import static java.util.Objects.requireNonNull;
 
@@ -56,7 +57,8 @@ public class JoinHashSupplier
         requireNonNull(pagesHashStrategy, "pagesHashStrategy is null");
 
         PositionLinks.FactoryBuilder positionLinksFactoryBuilder;
-        if (sortChannel.isPresent()) {
+        if (sortChannel.isPresent() &&
+                isFastInequalityJoin(session)) {
             checkArgument(filterFunctionFactory.isPresent(), "filterFunctionFactory not set while sortChannel set");
             positionLinksFactoryBuilder = SortedPositionLinks.builder(
                     addresses.size(),

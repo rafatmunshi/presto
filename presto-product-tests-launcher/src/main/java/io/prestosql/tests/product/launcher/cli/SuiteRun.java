@@ -173,7 +173,7 @@ public class SuiteRun
             return getFailedCount(testRunsResults) == 0 ? ExitCode.OK : ExitCode.SOFTWARE;
         }
 
-        private void printTestRunsSummary(String suiteName, List<TestRunResult> results)
+        private int printTestRunsSummary(String suiteName, List<TestRunResult> results)
         {
             long failedRuns = getFailedCount(results);
 
@@ -191,6 +191,8 @@ public class SuiteRun
             results.stream()
                     .filter(TestRunResult::hasFailed)
                     .forEach(Execution::printTestRunSummary);
+
+            return failedRuns == 0L ? 0 : 1;
         }
 
         private static long getFailedCount(List<TestRunResult> results)
@@ -233,7 +235,7 @@ public class SuiteRun
 
                 return Optional.empty();
             }
-            catch (RuntimeException e) {
+            catch (Exception e) {
                 return Optional.of(e);
             }
         }

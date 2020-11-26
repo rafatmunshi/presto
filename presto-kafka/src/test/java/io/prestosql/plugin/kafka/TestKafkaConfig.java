@@ -35,8 +35,7 @@ public class TestKafkaConfig
                 .setTableNames("")
                 .setTableDescriptionDir(new File("etc/kafka/"))
                 .setHideInternalColumns(true)
-                .setMessagesPerSplit(100_000)
-                .setTimestampUpperBoundPushDownEnabled(false));
+                .setMessagesPerSplit(100_000));
     }
 
     @Test
@@ -50,7 +49,6 @@ public class TestKafkaConfig
                 .put("kafka.buffer-size", "1MB")
                 .put("kafka.hide-internal-columns", "false")
                 .put("kafka.messages-per-split", "1")
-                .put("kafka.timestamp-upper-bound-force-push-down-enabled", "true")
                 .build();
 
         KafkaConfig expected = new KafkaConfig()
@@ -60,8 +58,7 @@ public class TestKafkaConfig
                 .setNodes("localhost:12345, localhost:23456")
                 .setKafkaBufferSize("1MB")
                 .setHideInternalColumns(false)
-                .setMessagesPerSplit(1)
-                .setTimestampUpperBoundPushDownEnabled(true);
+                .setMessagesPerSplit(1);
 
         assertFullMapping(properties, expected);
     }

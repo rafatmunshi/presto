@@ -122,11 +122,11 @@ public final class PredicateUtils
         return new TupleDomainParquetPredicate(parquetTupleDomain, columnReferences.build(), timeZone);
     }
 
-    public static boolean predicateMatches(Predicate parquetPredicate, BlockMetaData block, ParquetDataSource dataSource, Map<List<String>, RichColumnDescriptor> descriptorsByPath, TupleDomain<ColumnDescriptor> parquetTupleDomain)
+    public static boolean predicateMatches(Predicate parquetPredicate, BlockMetaData block, ParquetDataSource dataSource, Map<List<String>, RichColumnDescriptor> descriptorsByPath, TupleDomain<ColumnDescriptor> parquetTupleDomain, boolean failOnCorruptedParquetStatistics)
             throws ParquetCorruptionException
     {
         Map<ColumnDescriptor, Statistics<?>> columnStatistics = getStatistics(block, descriptorsByPath);
-        if (!parquetPredicate.matches(block.getRowCount(), columnStatistics, dataSource.getId())) {
+        if (!parquetPredicate.matches(block.getRowCount(), columnStatistics, dataSource.getId(), failOnCorruptedParquetStatistics)) {
             return false;
         }
 

@@ -13,15 +13,16 @@
  */
 package io.prestosql.plugin.session.db;
 
-import com.google.common.collect.ImmutableList;
-import io.prestosql.plugin.session.AbstractSessionPropertyManager;
+import com.google.common.collect.ImmutableMap;
 import io.prestosql.plugin.session.SessionMatchSpec;
 import io.prestosql.spi.session.SessionConfigurationContext;
 import io.prestosql.spi.session.SessionPropertyConfigurationManager;
 
 import javax.inject.Inject;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -30,7 +31,7 @@ import static java.util.Objects.requireNonNull;
  * about session property overrides given {@link SessionConfigurationContext}.
  */
 public class DbSessionPropertyManager
-        extends AbstractSessionPropertyManager
+        implements SessionPropertyConfigurationManager
 {
     private final DbSpecsProvider specsProvider;
 
@@ -41,8 +42,23 @@ public class DbSessionPropertyManager
     }
 
     @Override
-    protected List<SessionMatchSpec> getSessionMatchSpecs()
+    public Map<String, String> getSystemSessionProperties(SessionConfigurationContext context)
     {
-        return ImmutableList.copyOf(specsProvider.get());
+        List<SessionMatchSpec> sessionMatchSpecs = specsProvider.get();
+
+        // later properties override earlier properties
+        Map<String, String> combinedProperties = new HashMap<>();
+        for (SessionMatchSpec sessionMatchSpec : sessionMatchSpecs) {
+            combinedProperties.putAll(sessionMatchSpec.match(context));
+        }
+
+        return ImmutableMap.copyOf(combinedProperties);
+    }
+
+    @Override
+    public Map<String, Map<String, String>> getCatalogSessionProperties(SessionConfigurationContext context)
+    {
+        // NOT IMPLEMENTED YET
+        return ImmutableMap.of();
     }
 }

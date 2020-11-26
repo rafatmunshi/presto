@@ -21,7 +21,6 @@ import io.prestosql.operator.InterpretedHashGenerator;
 import io.prestosql.operator.PrecomputedHashGenerator;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 
@@ -45,8 +44,7 @@ class PartitioningExchanger
             LocalExchangeMemoryManager memoryManager,
             List<? extends Type> types,
             List<Integer> partitionChannels,
-            Optional<Integer> hashChannel,
-            BlockTypeOperators blockTypeOperators)
+            Optional<Integer> hashChannel)
     {
         this.buffers = ImmutableList.copyOf(requireNonNull(partitions, "partitions is null"));
         this.memoryManager = requireNonNull(memoryManager, "memoryManager is null");
@@ -59,7 +57,7 @@ class PartitioningExchanger
             List<Type> partitionChannelTypes = partitionChannels.stream()
                     .map(types::get)
                     .collect(toImmutableList());
-            hashGenerator = new InterpretedHashGenerator(partitionChannelTypes, Ints.toArray(partitionChannels), blockTypeOperators);
+            hashGenerator = new InterpretedHashGenerator(partitionChannelTypes, Ints.toArray(partitionChannels));
         }
         partitionGenerator = new LocalPartitionGenerator(hashGenerator, buffers.size());
 

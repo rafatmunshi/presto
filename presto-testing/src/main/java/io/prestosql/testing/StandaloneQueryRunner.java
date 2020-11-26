@@ -14,6 +14,7 @@
 package io.prestosql.testing;
 
 import com.google.common.collect.ImmutableMap;
+import io.airlift.testing.Closeables;
 import io.prestosql.Session;
 import io.prestosql.connector.CatalogName;
 import io.prestosql.cost.StatsCalculator;
@@ -31,7 +32,6 @@ import io.prestosql.sql.planner.NodePartitioningManager;
 import io.prestosql.transaction.TransactionManager;
 import org.intellij.lang.annotations.Language;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,7 +39,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static io.airlift.testing.Closeables.closeAll;
 import static io.prestosql.testing.AbstractTestQueries.TEST_CATALOG_PROPERTIES;
 import static io.prestosql.testing.AbstractTestQueries.TEST_SYSTEM_PROPERTIES;
 import static java.util.Objects.requireNonNull;
@@ -97,12 +96,8 @@ public final class StandaloneQueryRunner
     @Override
     public void close()
     {
-        try {
-            closeAll(prestoClient, server);
-        }
-        catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        Closeables.closeQuietly(prestoClient);
+        Closeables.closeQuietly(server);
     }
 
     @Override

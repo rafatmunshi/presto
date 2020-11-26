@@ -29,9 +29,8 @@ import io.prestosql.plugin.hive.util.TempFileWriter;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.PageSorter;
 import io.prestosql.spi.PrestoException;
-import io.prestosql.spi.connector.SortOrder;
+import io.prestosql.spi.block.SortOrder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.openjdk.jol.info.ClassLayout;
@@ -76,7 +75,6 @@ public class SortingFileWriter
     private final TempFileSinkFactory tempFileSinkFactory;
     private final Queue<TempFile> tempFiles = new PriorityQueue<>(comparing(TempFile::getSize));
     private final AtomicLong nextFileId = new AtomicLong();
-    private final TypeOperators typeOperators;
 
     public SortingFileWriter(
             FileSystem fileSystem,
@@ -88,7 +86,6 @@ public class SortingFileWriter
             List<Integer> sortFields,
             List<SortOrder> sortOrders,
             PageSorter pageSorter,
-            TypeOperators typeOperators,
             TempFileSinkFactory tempFileSinkFactory)
     {
         checkArgument(maxOpenTempFiles >= 2, "maxOpenTempFiles must be at least two");
@@ -101,7 +98,6 @@ public class SortingFileWriter
         this.outputWriter = requireNonNull(outputWriter, "outputWriter is null");
         this.sortBuffer = new SortBuffer(maxMemory, types, sortFields, sortOrders, pageSorter);
         this.tempFileSinkFactory = tempFileSinkFactory;
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
     }
 
     @Override
@@ -222,7 +218,7 @@ public class SortingFileWriter
                 iterators.add(new TempFileReader(types, dataSource));
             }
 
-            new MergingPageIterator(iterators, types, sortFields, sortOrders, typeOperators)
+            new MergingPageIterator(iterators, types, sortFields, sortOrders)
                     .forEachRemaining(consumer);
 
             for (TempFile tempFile : files) {

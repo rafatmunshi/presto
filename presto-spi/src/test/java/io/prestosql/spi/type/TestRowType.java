@@ -17,6 +17,7 @@ import org.testng.annotations.Test;
 
 import java.util.List;
 
+import static io.prestosql.spi.block.MethodHandleUtil.methodHandle;
 import static io.prestosql.spi.type.BooleanType.BOOLEAN;
 import static io.prestosql.spi.type.DoubleType.DOUBLE;
 import static io.prestosql.spi.type.VarcharType.VARCHAR;
@@ -25,8 +26,6 @@ import static org.testng.Assert.assertEquals;
 
 public class TestRowType
 {
-    private final TypeOperators typeOperators = new TypeOperators();
-
     @Test
     public void testRowDisplayName()
     {
@@ -34,7 +33,13 @@ public class TestRowType
                 RowType.field("bool_col", BOOLEAN),
                 RowType.field("double_col", DOUBLE),
                 RowType.field("array_col", new ArrayType(VARCHAR)),
-                RowType.field("map_col", new MapType(BOOLEAN, DOUBLE, typeOperators)));
+                RowType.field("map_col", new MapType(
+                        BOOLEAN,
+                        DOUBLE,
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"))));
 
         RowType row = RowType.from(fields);
         assertEquals(
@@ -49,7 +54,13 @@ public class TestRowType
                 BOOLEAN,
                 DOUBLE,
                 new ArrayType(VARCHAR),
-                new MapType(BOOLEAN, DOUBLE, typeOperators));
+                new MapType(
+                        BOOLEAN,
+                        DOUBLE,
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation")));
         RowType row = RowType.anonymous(types);
         assertEquals(
                 row.getDisplayName(),
@@ -63,11 +74,22 @@ public class TestRowType
                 RowType.field(BOOLEAN),
                 RowType.field("double_col", DOUBLE),
                 RowType.field(new ArrayType(VARCHAR)),
-                RowType.field("map_col", new MapType(BOOLEAN, DOUBLE, typeOperators)));
+                RowType.field("map_col", new MapType(
+                        BOOLEAN,
+                        DOUBLE,
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"),
+                        methodHandle(TestRowType.class, "throwUnsupportedOperation"))));
 
         RowType row = RowType.from(fields);
         assertEquals(
                 row.getDisplayName(),
                 "row(boolean, double_col double, array(varchar), map_col map(boolean, double))");
+    }
+
+    public static void throwUnsupportedOperation()
+    {
+        throw new UnsupportedOperationException();
     }
 }

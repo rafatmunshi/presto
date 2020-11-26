@@ -394,8 +394,7 @@ is equivalent to::
         (origin_state, destination_state),
         (origin_state),
         (destination_state),
-        ()
-    );
+        ());
 
 .. code-block:: none
 
@@ -471,8 +470,7 @@ is logically equivalent to::
     FROM shipping
     GROUP BY GROUPING SETS (
         (origin_state, destination_state, origin_zip),
-        (origin_state, destination_state)
-    );
+        (origin_state, destination_state));
 
 .. code-block:: none
 
@@ -517,8 +515,7 @@ is equivalent to::
         (origin_state, destination_state),
         (origin_state),
         (destination_state),
-        ()
-    );
+        ());
 
 However, if the query uses the ``DISTINCT`` quantifier for the ``GROUP BY``::
 
@@ -538,8 +535,7 @@ only unique grouping sets are generated::
         (origin_state, destination_state),
         (origin_state),
         (destination_state),
-        ()
-    );
+        ());
 
 The default set quantifier is ``ALL``.
 
@@ -562,10 +558,9 @@ below::
            grouping(origin_state, origin_zip, destination_state)
     FROM shipping
     GROUP BY GROUPING SETS (
-        (origin_state),
-        (origin_state, origin_zip),
-        (destination_state)
-    );
+            (origin_state),
+            (origin_state, origin_zip),
+            (destination_state));
 
 .. code-block:: none
 
@@ -771,7 +766,7 @@ In the following example, the clause only applies to the select statement.
 
     INSERT INTO some_table
     SELECT * FROM another_table
-    ORDER BY field;
+    ORDER BY field
 
 Since tables in SQL are inherently unordered, and the ``ORDER BY`` clause in
 this case does not result in any difference, but negatively impacts performance
@@ -785,7 +780,7 @@ the outcome of the overall statement, is a nested query:
     SELECT *
     FROM some_table
         JOIN (SELECT * FROM another_table ORDER BY field) u
-        ON some_table.key = u.key;
+        ON some_table.key = u.key
 
 More background information and details can be found in
 `a blog post about this optimization <https://prestosql.io/blog/2019/06/03/redundant-order-by.html>`_.
@@ -893,9 +888,7 @@ clause be present. The result set consists of the same set of leading rows
 and all of the rows in the same peer group as the last of them ('ties')
 as established by the ordering in the ``ORDER BY`` clause. The result set is sorted::
 
-    SELECT name, regionkey 
-    FROM nation 
-    ORDER BY regionkey FETCH FIRST ROW WITH TIES;
+    SELECT name, regionkey FROM nation ORDER BY regionkey FETCH FIRST ROW WITH TIES;
 
 .. code-block:: none
 
@@ -1083,7 +1076,7 @@ computing the rows to be joined::
     SELECT name, x, y
     FROM nation
     CROSS JOIN LATERAL (SELECT name || ' :-' AS x)
-    CROSS JOIN LATERAL (SELECT x || ')' AS y);
+    CROSS JOIN LATERAL (SELECT x || ')' AS y)
 
 Qualifying Column Names
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -1128,11 +1121,7 @@ The ``EXISTS`` predicate determines if a subquery returns any rows::
 
     SELECT name
     FROM nation
-    WHERE EXISTS (
-         SELECT * 
-         FROM region 
-         WHERE region.regionkey = nation.regionkey
-    );
+    WHERE EXISTS (SELECT * FROM region WHERE region.regionkey = nation.regionkey)
 
 IN
 ^^
@@ -1143,11 +1132,7 @@ standard rules for nulls. The subquery must produce exactly one column::
 
     SELECT name
     FROM nation
-    WHERE regionkey IN (
-         SELECT regionkey 
-         FROM region
-         WHERE name = 'AMERICA' OR name = 'AFRICA'
-    );
+    WHERE regionkey IN (SELECT regionkey FROM region)
 
 Scalar Subquery
 ^^^^^^^^^^^^^^^
@@ -1158,6 +1143,6 @@ row. The returned value is ``NULL`` if the subquery produces no rows::
 
     SELECT name
     FROM nation
-    WHERE regionkey = (SELECT max(regionkey) FROM region);
+    WHERE regionkey = (SELECT max(regionkey) FROM region)
 
 .. note:: Currently only single column can be returned from the scalar subquery.

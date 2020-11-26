@@ -47,7 +47,6 @@ import io.prestosql.spi.type.DoubleType;
 import io.prestosql.spi.type.IntegerType;
 import io.prestosql.spi.type.RealType;
 import io.prestosql.spi.type.SmallintType;
-import io.prestosql.spi.type.TimestampType;
 import io.prestosql.spi.type.TinyintType;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.VarbinaryType;
@@ -126,6 +125,7 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.COMPRESSRESULT;
 import static org.apache.hadoop.hive.metastore.TableType.MANAGED_TABLE;
 import static org.apache.hadoop.hive.metastore.TableType.MATERIALIZED_VIEW;
+import static org.apache.hadoop.hive.ql.io.AcidUtils.isTransactionalTable;
 import static org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector;
 import static org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory.getPrimitiveWritableObjectInspector;
 import static org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory.javaBooleanObjectInspector;
@@ -423,6 +423,12 @@ public final class HiveWriteUtils
         if (storage.isSkewed()) {
             throw new PrestoException(NOT_SUPPORTED, format("Inserting into bucketed tables with skew is not supported. %s", tablePartitionDescription));
         }
+
+        // verify transactional
+        if (isTransactionalTable(parameters)) {
+            // TODO support writing to transactional tables
+            throw new PrestoException(NOT_SUPPORTED, "Writes to Hive transactional tables are not supported: " + tableName);
+        }
     }
 
     public static Path getTableDefaultLocation(HdfsContext context, SemiTransactionalHiveMetastore metastore, HdfsEnvironment hdfsEnvironment, String schemaName, String tableName)
@@ -696,7 +702,7 @@ public final class HiveWriteUtils
             return writableDateObjectInspector;
         }
 
-        if (type instanceof TimestampType) {
+        if (type.equals(TIMESTAMP_MILLIS)) {
             return writableTimestampObjectInspector;
         }
 

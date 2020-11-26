@@ -22,7 +22,6 @@ import io.prestosql.metadata.TableHandle;
 import io.prestosql.plugin.tpch.TpchColumnHandle;
 import io.prestosql.plugin.tpch.TpchTableHandle;
 import io.prestosql.plugin.tpch.TpchTransactionHandle;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.PlanNodeIdAllocator;
 import io.prestosql.sql.planner.TypeAnalyzer;
 import io.prestosql.sql.planner.TypeProvider;
@@ -42,7 +41,6 @@ public class TestValidateStreamingAggregations
         extends BasePlanTest
 {
     private Metadata metadata;
-    private TypeOperators typeOperators = new TypeOperators();
     private TypeAnalyzer typeAnalyzer;
     private PlanNodeIdAllocator idAllocator = new PlanNodeIdAllocator();
     private TableHandle nationTableHandle;
@@ -111,7 +109,7 @@ public class TestValidateStreamingAggregations
         getQueryRunner().inTransaction(session -> {
             // metadata.getCatalogHandle() registers the catalog for the transaction
             session.getCatalog().ifPresent(catalog -> metadata.getCatalogHandle(session, catalog));
-            new ValidateStreamingAggregations().validate(planNode, session, metadata, typeOperators, typeAnalyzer, types, WarningCollector.NOOP);
+            new ValidateStreamingAggregations().validate(planNode, session, metadata, typeAnalyzer, types, WarningCollector.NOOP);
             return null;
         });
     }

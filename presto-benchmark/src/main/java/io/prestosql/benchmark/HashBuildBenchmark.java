@@ -26,12 +26,10 @@ import io.prestosql.operator.PartitionedLookupSourceFactory;
 import io.prestosql.operator.TaskContext;
 import io.prestosql.operator.ValuesOperator.ValuesOperatorFactory;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spiller.SingleStreamSpillerFactory;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.testing.LocalQueryRunner;
 import io.prestosql.testing.NullOutputOperator.NullOutputOperatorFactory;
-import io.prestosql.type.BlockTypeOperators;
 
 import java.util.List;
 import java.util.Optional;
@@ -59,7 +57,6 @@ public class HashBuildBenchmark
         // hash build
         List<Type> ordersTypes = getColumnTypes("orders", "orderkey", "totalprice");
         OperatorFactory ordersTableScan = createTableScanOperator(0, new PlanNodeId("test"), "orders", "orderkey", "totalprice");
-        BlockTypeOperators blockTypeOperators = new BlockTypeOperators(new TypeOperators());
         JoinBridgeManager<PartitionedLookupSourceFactory> lookupSourceFactoryManager = JoinBridgeManager.lookupAllAtOnce(new PartitionedLookupSourceFactory(
                 ordersTypes,
                 ImmutableList.of(0, 1).stream()
@@ -69,8 +66,7 @@ public class HashBuildBenchmark
                         .map(ordersTypes::get)
                         .collect(toImmutableList()),
                 1,
-                false,
-                blockTypeOperators));
+                false));
         HashBuilderOperatorFactory hashBuilder = new HashBuilderOperatorFactory(
                 1,
                 new PlanNodeId("test"),
@@ -99,8 +95,7 @@ public class HashBuildBenchmark
                 OptionalInt.empty(),
                 Optional.empty(),
                 OptionalInt.empty(),
-                unsupportedPartitioningSpillerFactory(),
-                blockTypeOperators);
+                unsupportedPartitioningSpillerFactory());
         joinDriversBuilder.add(joinOperator);
         joinDriversBuilder.add(new NullOutputOperatorFactory(3, new PlanNodeId("test")));
         DriverFactory joinDriverFactory = new DriverFactory(1, true, true, joinDriversBuilder.build(), OptionalInt.empty(), UNGROUPED_EXECUTION);

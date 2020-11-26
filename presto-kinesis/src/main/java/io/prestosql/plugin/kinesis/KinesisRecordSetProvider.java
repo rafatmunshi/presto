@@ -27,7 +27,6 @@ import io.prestosql.spi.connector.RecordSet;
 import java.util.HashMap;
 import java.util.List;
 
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static java.util.Objects.requireNonNull;
 
@@ -59,7 +58,7 @@ public class KinesisRecordSetProvider
         KinesisSplit kinesisSplit = (KinesisSplit) split;
         List<KinesisColumnHandle> kinesisColumns = columns.stream()
                 .map(x -> (KinesisColumnHandle) x)
-                .collect(toImmutableList());
+                .collect(ImmutableList.toImmutableList());
 
         ImmutableList.Builder<KinesisColumnHandle> handleBuilder = ImmutableList.builder();
 

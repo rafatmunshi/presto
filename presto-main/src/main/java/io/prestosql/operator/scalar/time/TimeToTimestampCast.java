@@ -19,6 +19,7 @@ import io.prestosql.spi.function.LiteralParameters;
 import io.prestosql.spi.function.ScalarOperator;
 import io.prestosql.spi.function.SqlType;
 import io.prestosql.spi.type.LongTimestamp;
+import io.prestosql.spi.type.TimeType;
 
 import java.time.LocalDate;
 
@@ -27,6 +28,7 @@ import static io.prestosql.type.DateTimes.MICROSECONDS_PER_SECOND;
 import static io.prestosql.type.DateTimes.PICOSECONDS_PER_MICROSECOND;
 import static io.prestosql.type.DateTimes.PICOSECONDS_PER_SECOND;
 import static io.prestosql.type.DateTimes.SECONDS_PER_DAY;
+import static io.prestosql.type.DateTimes.rescale;
 import static io.prestosql.type.DateTimes.round;
 import static java.lang.Math.multiplyExact;
 
@@ -43,9 +45,7 @@ public final class TimeToTimestampCast
             ConnectorSession session,
             @SqlType("time(sourcePrecision)") long time)
     {
-        long epochSeconds = getEpochSeconds(session, time);
-        long picoFraction = getPicoFraction(sourcePrecision, targetPrecision, time);
-        return computeEpochMicros(epochSeconds, picoFraction);
+        return cast(sourcePrecision, targetPrecision, session, time);
     }
 
     @LiteralParameters({"sourcePrecision", "targetPrecision"})
@@ -56,37 +56,23 @@ public final class TimeToTimestampCast
             ConnectorSession session,
             @SqlType("time(sourcePrecision)") long time)
     {
-        long epochSeconds = getEpochSeconds(session, time);
-        long picoFraction = getPicoFraction(sourcePrecision, targetPrecision, time);
-        long epochMicros = computeEpochMicros(epochSeconds, picoFraction);
-
-        int picosOfMicro = (int) (picoFraction % PICOSECONDS_PER_MICROSECOND);
-        return new LongTimestamp(epochMicros, picosOfMicro);
+        long epochMicros = cast(sourcePrecision, targetPrecision, session, time);
+        return new LongTimestamp(epochMicros, (int) (time % PICOSECONDS_PER_MICROSECOND));
     }
 
-    private static long getEpochSeconds(ConnectorSession session, long time)
+    private static long cast(long sourcePrecision, long targetPrecision, ConnectorSession session, long time)
     {
         // TODO: consider using something more efficient than LocalDate.ofInstant() to compute epochDay
         long epochDay = LocalDate.ofInstant(session.getStart(), session.getTimeZoneKey().getZoneId())
                 .toEpochDay();
 
-        return multiplyExact(epochDay, SECONDS_PER_DAY) + time / PICOSECONDS_PER_SECOND;
-    }
-
-    private static long getPicoFraction(long sourcePrecision, long targetPrecision, long time)
-    {
+        long epochSecond = multiplyExact(epochDay, SECONDS_PER_DAY) + time / PICOSECONDS_PER_SECOND;
         long picoFraction = time % PICOSECONDS_PER_SECOND;
         if (sourcePrecision > targetPrecision) {
-            picoFraction = round(picoFraction, (int) (12 - targetPrecision));
+            picoFraction = round(picoFraction, (int) (TimeType.MAX_PRECISION - targetPrecision));
         }
 
-        return picoFraction;
-    }
-
-    private static long computeEpochMicros(long epochSeconds, long picoFraction)
-    {
-        // picoFraction is already rounded to whole micros
-        long microFraction = picoFraction / PICOSECONDS_PER_MICROSECOND;
-        return multiplyExact(epochSeconds, MICROSECONDS_PER_SECOND) + microFraction;
+        long microFraction = rescale(picoFraction, TimeType.MAX_PRECISION, 6);
+        return multiplyExact(epochSecond, MICROSECONDS_PER_SECOND) + microFraction;
     }
 }

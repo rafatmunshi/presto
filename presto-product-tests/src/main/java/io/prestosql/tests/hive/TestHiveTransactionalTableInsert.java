@@ -13,11 +13,10 @@
  */
 package io.prestosql.tests.hive;
 
-import org.testng.SkipException;
+import io.prestosql.tempto.ProductTest;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
-import static io.prestosql.tempto.assertions.QueryAssert.Row.row;
 import static io.prestosql.tempto.assertions.QueryAssert.assertThat;
 import static io.prestosql.tempto.query.QueryExecutor.query;
 import static io.prestosql.tests.TestGroups.HIVE_TRANSACTIONAL;
@@ -26,15 +25,11 @@ import static java.util.Locale.ENGLISH;
 import static java.util.stream.Collectors.joining;
 
 public class TestHiveTransactionalTableInsert
-        extends HiveProductTest
+        extends ProductTest
 {
     @Test(dataProvider = "transactionalTableType", groups = HIVE_TRANSACTIONAL)
     public void testInsertIntoTransactionalTable(TransactionalTableType type)
     {
-        if (getHiveVersionMajor() < 3) {
-            throw new SkipException("Hive transactional tables are supported with Hive version 3 or above");
-        }
-
         String tableName = "test_insert_into_transactional_table_" + type.name().toLowerCase(ENGLISH);
         onHive().executeQuery("" +
                 "CREATE TABLE " + tableName + "(a bigint)" +
@@ -42,9 +37,8 @@ public class TestHiveTransactionalTableInsert
                 hiveTableProperties(type));
 
         try {
-            query("INSERT INTO " + tableName + " (a) VALUES (42)");
-            assertThat(query("SELECT * FROM " + tableName))
-                    .containsOnly(row(42));
+            assertThat(() -> query("INSERT INTO " + tableName + " (a) VALUES (42)"))
+                    .failsWithMessage("Hive transactional tables are not supported: default." + tableName);
         }
         finally {
             onHive().executeQuery("DROP TABLE " + tableName);

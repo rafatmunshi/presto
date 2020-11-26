@@ -48,12 +48,6 @@ public class TestPostgreSqlDistributedQueries
     }
 
     @Override
-    protected boolean supportsDelete()
-    {
-        return false;
-    }
-
-    @Override
     protected boolean supportsViews()
     {
         return false;
@@ -67,12 +61,6 @@ public class TestPostgreSqlDistributedQueries
     }
 
     @Override
-    protected boolean supportsCommentOnTable()
-    {
-        return false;
-    }
-
-    @Override
     protected TestTable createTableWithDefaultColumns()
     {
         return new TestTable(
@@ -83,6 +71,19 @@ public class TestPostgreSqlDistributedQueries
                         "col_default BIGINT DEFAULT 43," +
                         "col_nonnull_default BIGINT NOT NULL DEFAULT 42," +
                         "col_required2 BIGINT NOT NULL)");
+    }
+
+    @Override
+    public void testCommentTable()
+    {
+        // PostgreSQL connector currently does not support comment on table
+        assertQueryFails("COMMENT ON TABLE orders IS 'hello'", "This connector does not support setting table comments");
+    }
+
+    @Override
+    public void testDelete()
+    {
+        // delete is not supported
     }
 
     // PostgreSQL specific tests should normally go in TestPostgreSqlIntegrationSmokeTest

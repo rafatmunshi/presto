@@ -188,6 +188,7 @@ public class ClientOptions
                 schema,
                 null,
                 timeZone,
+                false,
                 Locale.getDefault(),
                 toResourceEstimates(resourceEstimates),
                 toProperties(sessionProperties),

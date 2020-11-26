@@ -38,7 +38,6 @@ import io.prestosql.spi.Page;
 import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.block.LazyBlock;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spiller.GenericPartitioningSpillerFactory;
 import io.prestosql.spiller.PartitioningSpillerFactory;
 import io.prestosql.spiller.SingleStreamSpiller;
@@ -47,7 +46,6 @@ import io.prestosql.sql.gen.JoinFilterFunctionCompiler.JoinFilterFunctionFactory
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.testing.MaterializedResult;
 import io.prestosql.testing.TestingTaskContext;
-import io.prestosql.type.BlockTypeOperators;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
@@ -115,7 +113,6 @@ public class TestHashJoinOperator
     private static final LookupJoinOperators LOOKUP_JOIN_OPERATORS = new LookupJoinOperators();
     private static final SingleStreamSpillerFactory SINGLE_STREAM_SPILLER_FACTORY = new DummySpillerFactory();
     private static final PartitioningSpillerFactory PARTITIONING_SPILLER_FACTORY = new GenericPartitioningSpillerFactory(SINGLE_STREAM_SPILLER_FACTORY);
-    private static final BlockTypeOperators TYPE_OPERATOR_FACTORY = new BlockTypeOperators(new TypeOperators());
 
     private ExecutorService executor;
     private ScheduledExecutorService scheduledExecutor;
@@ -137,7 +134,7 @@ public class TestHashJoinOperator
                 new SynchronousQueue<>(),
                 daemonThreadsNamed("test-executor-%s"),
                 new ThreadPoolExecutor.DiscardPolicy());
-        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("test-scheduledExecutor-%s"));
     }
 
     @AfterMethod(alwaysRun = true)
@@ -237,8 +234,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         instantiateBuildDrivers(buildSideSetup, taskContext);
         buildLookupSource(buildSideSetup);
@@ -1055,8 +1051,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         // drivers and operators
         instantiateBuildDrivers(buildSideSetup, taskContext);
@@ -1092,8 +1087,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         // drivers and operators
         instantiateBuildDrivers(buildSideSetup, taskContext);
@@ -1135,8 +1129,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         // build drivers and operators
         instantiateBuildDrivers(buildSideSetup, taskContext);
@@ -1181,8 +1174,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         // build drivers and operators
         instantiateBuildDrivers(buildSideSetup, taskContext);
@@ -1226,8 +1218,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         // build drivers and operators
         instantiateBuildDrivers(buildSideSetup, taskContext);
@@ -1376,8 +1367,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
 
         // build drivers and operators
         instantiateBuildDrivers(buildSideSetup, taskContext);
@@ -1423,8 +1413,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                PARTITIONING_SPILLER_FACTORY,
-                TYPE_OPERATOR_FACTORY);
+                PARTITIONING_SPILLER_FACTORY);
     }
 
     private OperatorFactory innerJoinOperatorFactory(JoinBridgeManager<PartitionedLookupSourceFactory> lookupSourceFactoryManager, RowPagesBuilder probePages, PartitioningSpillerFactory partitioningSpillerFactory)
@@ -1438,8 +1427,7 @@ public class TestHashJoinOperator
                 getHashChannelAsInt(probePages),
                 Optional.empty(),
                 OptionalInt.of(1),
-                partitioningSpillerFactory,
-                TYPE_OPERATOR_FACTORY);
+                partitioningSpillerFactory);
     }
 
     private BuildSideSetup setupBuildSide(
@@ -1462,8 +1450,7 @@ public class TestHashJoinOperator
                 hashChannels,
                 buildPages.getHashChannel(),
                 UNGROUPED_EXECUTION,
-                DataSize.of(32, DataSize.Unit.MEGABYTE),
-                TYPE_OPERATOR_FACTORY);
+                DataSize.of(32, DataSize.Unit.MEGABYTE));
         LocalExchangeSinkFactoryId localExchangeSinkFactoryId = localExchangeFactory.newSinkFactoryId();
         localExchangeFactory.noMoreSinkFactories();
 
@@ -1492,8 +1479,7 @@ public class TestHashJoinOperator
                         .map(buildPages.getTypes()::get)
                         .collect(toImmutableList()),
                 partitionCount,
-                false,
-                TYPE_OPERATOR_FACTORY));
+                false));
 
         HashBuilderOperatorFactory buildOperatorFactory = new HashBuilderOperatorFactory(
                 1,

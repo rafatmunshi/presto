@@ -71,7 +71,6 @@ public class LogTestDurationListener
     public LogTestDurationListener()
     {
         scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(daemonThreadsNamed("TestHangMonitor"));
-        LOG.info("LogTestDurationListener enabled: %s", enabled);
     }
 
     @Override

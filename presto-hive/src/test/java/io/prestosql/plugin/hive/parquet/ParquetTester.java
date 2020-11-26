@@ -569,7 +569,7 @@ public class ParquetTester
         return OPTIMIZED ? FileFormat.PRESTO_PARQUET : FileFormat.HIVE_PARQUET;
     }
 
-    public static void writeParquetColumn(
+    private static void writeParquetColumn(
             JobConf jobConf,
             File outputFile,
             CompressionCodecName compressionCodecName,
@@ -603,7 +603,7 @@ public class ParquetTester
         recordWriter.close(false);
     }
 
-    public static Properties createTableProperties(List<String> columnNames, List<ObjectInspector> objectInspectors)
+    private static Properties createTableProperties(List<String> columnNames, List<ObjectInspector> objectInspectors)
     {
         Properties orderTableProperties = new Properties();
         orderTableProperties.setProperty("columns", Joiner.on(',').join(columnNames));
@@ -611,7 +611,7 @@ public class ParquetTester
         return orderTableProperties;
     }
 
-    public static class TempFile
+    private static class TempFile
             implements Closeable
     {
         private final File file;

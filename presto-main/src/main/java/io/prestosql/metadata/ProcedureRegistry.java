@@ -47,8 +47,11 @@ public class ProcedureRegistry
 {
     private final Map<CatalogName, Map<SchemaTableName, Procedure>> connectorProcedures = new ConcurrentHashMap<>();
 
-    public ProcedureRegistry()
+    private final Metadata metadata;
+
+    public ProcedureRegistry(Metadata metadata)
     {
+        this.metadata = requireNonNull(metadata, "typeManager is null");
     }
 
     public void addProcedures(CatalogName catalogName, Collection<Procedure> procedures)

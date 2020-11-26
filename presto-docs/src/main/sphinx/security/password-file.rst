@@ -27,10 +27,10 @@ The following configuration properties are available:
 ==================================== ==============================================
 Property                             Description
 ==================================== ==============================================
-``file.password-file``               Path of the password file.
+``file.password``                    Path of the password file.
 
 ``file.refresh-period``              How often to reload the password file.
-                                     Defaults to ``5s``.
+                                     Defaults to ``1m``.
 
 ``file.auth-token-cache.max-size``   Max number of cached authenticated passwords.
                                      Defaults to ``1000``.

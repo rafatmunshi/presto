@@ -15,8 +15,6 @@ package io.prestosql.operator;
 
 import com.google.common.collect.ImmutableList;
 import io.prestosql.spi.Page;
-import io.prestosql.spi.type.TypeOperators;
-import io.prestosql.type.BlockTypeOperators;
 import org.testng.annotations.Test;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -29,14 +27,12 @@ import static org.testng.Assert.assertTrue;
 
 public class TestMergeHashSort
 {
-    private BlockTypeOperators blockTypeOperators = new BlockTypeOperators(new TypeOperators());
-
     @Test
     public void testBinaryMergeIteratorOverEmptyPage()
     {
         Page emptyPage = new Page(0, BIGINT.createFixedSizeBlockBuilder(0).build());
 
-        WorkProcessor<Page> mergedPage = new MergeHashSort(newSimpleAggregatedMemoryContext(), blockTypeOperators).merge(
+        WorkProcessor<Page> mergedPage = new MergeHashSort(newSimpleAggregatedMemoryContext()).merge(
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(ImmutableList.of(emptyPage).iterator()).stream()
@@ -53,7 +49,7 @@ public class TestMergeHashSort
         Page emptyPage = new Page(0, BIGINT.createFixedSizeBlockBuilder(0).build());
         Page page = rowPagesBuilder(BIGINT).row(42).build().get(0);
 
-        WorkProcessor<Page> mergedPage = new MergeHashSort(newSimpleAggregatedMemoryContext(), blockTypeOperators).merge(
+        WorkProcessor<Page> mergedPage = new MergeHashSort(newSimpleAggregatedMemoryContext()).merge(
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(ImmutableList.of(emptyPage, page).iterator()).stream()
@@ -76,7 +72,7 @@ public class TestMergeHashSort
         Page emptyPage = new Page(0, BIGINT.createFixedSizeBlockBuilder(0).build());
         Page page = rowPagesBuilder(BIGINT).row(42).build().get(0);
 
-        WorkProcessor<Page> mergedPage = new MergeHashSort(newSimpleAggregatedMemoryContext(), blockTypeOperators).merge(
+        WorkProcessor<Page> mergedPage = new MergeHashSort(newSimpleAggregatedMemoryContext()).merge(
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(ImmutableList.of(emptyPage, page).iterator()).stream()
@@ -103,7 +99,7 @@ public class TestMergeHashSort
                 .row(60)
                 .build().get(0);
 
-        WorkProcessor<Page> mergedPages = new MergeHashSort(newSimpleAggregatedMemoryContext(), blockTypeOperators).merge(
+        WorkProcessor<Page> mergedPages = new MergeHashSort(newSimpleAggregatedMemoryContext()).merge(
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(BIGINT),
                 ImmutableList.of(ImmutableList.of(page).iterator()).stream()

@@ -21,7 +21,6 @@ import io.airlift.units.Duration;
 import io.prestosql.client.NodeVersion;
 import io.prestosql.connector.CatalogName;
 import io.prestosql.cost.StatsAndCosts;
-import io.prestosql.execution.DynamicFilterConfig;
 import io.prestosql.execution.MockRemoteTaskFactory;
 import io.prestosql.execution.MockRemoteTaskFactory.MockRemoteTask;
 import io.prestosql.execution.NodeTaskMap;
@@ -34,7 +33,6 @@ import io.prestosql.failuredetector.NoOpFailureDetector;
 import io.prestosql.metadata.InMemoryNodeManager;
 import io.prestosql.metadata.InternalNode;
 import io.prestosql.metadata.InternalNodeManager;
-import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.QualifiedObjectName;
 import io.prestosql.server.DynamicFilterService;
 import io.prestosql.spi.QueryId;
@@ -44,7 +42,6 @@ import io.prestosql.spi.connector.ConnectorSplitSource;
 import io.prestosql.spi.connector.DynamicFilter;
 import io.prestosql.spi.connector.FixedSplitSource;
 import io.prestosql.spi.predicate.TupleDomain;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.split.ConnectorAwareSplitSource;
 import io.prestosql.split.SplitSource;
 import io.prestosql.sql.DynamicFilters;
@@ -53,7 +50,6 @@ import io.prestosql.sql.planner.PartitioningScheme;
 import io.prestosql.sql.planner.PlanFragment;
 import io.prestosql.sql.planner.StageExecutionPlan;
 import io.prestosql.sql.planner.Symbol;
-import io.prestosql.sql.planner.SymbolAllocator;
 import io.prestosql.sql.planner.plan.DynamicFilterId;
 import io.prestosql.sql.planner.plan.FilterNode;
 import io.prestosql.sql.planner.plan.JoinNode;
@@ -61,6 +57,7 @@ import io.prestosql.sql.planner.plan.PlanFragmentId;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.sql.planner.plan.RemoteSourceNode;
 import io.prestosql.sql.planner.plan.TableScanNode;
+import io.prestosql.sql.tree.SymbolReference;
 import io.prestosql.testing.TestingMetadata.TestingColumnHandle;
 import io.prestosql.testing.TestingSplit;
 import io.prestosql.util.FinalizerService;
@@ -89,7 +86,6 @@ import static io.prestosql.metadata.MetadataManager.createTestMetadataManager;
 import static io.prestosql.operator.StageExecutionDescriptor.ungroupedExecution;
 import static io.prestosql.spi.StandardErrorCode.NO_NODES_AVAILABLE;
 import static io.prestosql.spi.connector.NotPartitionedPartitionHandle.NOT_PARTITIONED;
-import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.VarcharType.VARCHAR;
 import static io.prestosql.sql.DynamicFilters.createDynamicFilterExpression;
 import static io.prestosql.sql.planner.SystemPartitioningHandle.SINGLE_DISTRIBUTION;
@@ -118,8 +114,6 @@ public class TestSourcePartitionedScheduler
     private final ScheduledExecutorService scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("stageScheduledExecutor-%s"));
     private final InMemoryNodeManager nodeManager = new InMemoryNodeManager();
     private final FinalizerService finalizerService = new FinalizerService();
-    private final Metadata metadata = createTestMetadataManager();
-    private final TypeOperators typeOperators = new TypeOperators();
 
     public TestSourcePartitionedScheduler()
     {
@@ -336,7 +330,7 @@ public class TestSourcePartitionedScheduler
                     Iterables.getOnlyElement(plan.getSplitSources().values()),
                     new DynamicSplitPlacementPolicy(nodeScheduler.createNodeSelector(Optional.of(CONNECTOR_ID)), stage::getAllTasks),
                     2,
-                    new DynamicFilterService(metadata, typeOperators, new DynamicFilterConfig()),
+                    new DynamicFilterService(),
                     () -> false);
             scheduler.schedule();
         }).hasErrorCode(NO_NODES_AVAILABLE);
@@ -410,7 +404,7 @@ public class TestSourcePartitionedScheduler
                 Iterables.getOnlyElement(plan.getSplitSources().values()),
                 new DynamicSplitPlacementPolicy(nodeScheduler.createNodeSelector(Optional.of(CONNECTOR_ID)), stage::getAllTasks),
                 500,
-                new DynamicFilterService(metadata, typeOperators, new DynamicFilterConfig()),
+                new DynamicFilterService(),
                 () -> false);
 
         // the queues of 3 running nodes should be full
@@ -449,7 +443,7 @@ public class TestSourcePartitionedScheduler
                 Iterables.getOnlyElement(plan.getSplitSources().values()),
                 new DynamicSplitPlacementPolicy(nodeScheduler.createNodeSelector(Optional.of(CONNECTOR_ID)), stage::getAllTasks),
                 400,
-                new DynamicFilterService(metadata, typeOperators, new DynamicFilterConfig()),
+                new DynamicFilterService(),
                 () -> true);
 
         // the queues of 3 running nodes should be full
@@ -473,10 +467,9 @@ public class TestSourcePartitionedScheduler
         NodeTaskMap nodeTaskMap = new NodeTaskMap(finalizerService);
         SqlStageExecution stage = createSqlStageExecution(plan, nodeTaskMap);
         NodeScheduler nodeScheduler = new NodeScheduler(new UniformNodeSelectorFactory(nodeManager, new NodeSchedulerConfig().setIncludeCoordinator(false), nodeTaskMap));
-        DynamicFilterService dynamicFilterService = new DynamicFilterService(metadata, typeOperators, new DynamicFilterConfig());
+        DynamicFilterService dynamicFilterService = new DynamicFilterService();
         dynamicFilterService.registerQuery(
                 QUERY_ID,
-                TEST_SESSION,
                 ImmutableSet.of(DYNAMIC_FILTER_ID),
                 ImmutableSet.of(DYNAMIC_FILTER_ID),
                 ImmutableSet.of(DYNAMIC_FILTER_ID));
@@ -489,13 +482,11 @@ public class TestSourcePartitionedScheduler
                 dynamicFilterService,
                 () -> true);
 
-        SymbolAllocator symbolAllocator = new SymbolAllocator();
-        Symbol symbol = symbolAllocator.newSymbol("DF_SYMBOL1", BIGINT);
+        SymbolReference symbolReference = new SymbolReference("DF_SYMBOL1");
         DynamicFilter dynamicFilter = dynamicFilterService.createDynamicFilter(
                 QUERY_ID,
-                ImmutableList.of(new DynamicFilters.Descriptor(DYNAMIC_FILTER_ID, symbol.toSymbolReference())),
-                ImmutableMap.of(symbol, new TestingColumnHandle("probeColumnA")),
-                symbolAllocator.getTypes());
+                ImmutableList.of(new DynamicFilters.Descriptor(DYNAMIC_FILTER_ID, symbolReference)),
+                ImmutableMap.of(Symbol.from(symbolReference), new TestingColumnHandle("probeColumnA")));
 
         // make sure dynamic filter is initially blocked
         assertFalse(dynamicFilter.isBlocked().isDone());
@@ -529,7 +520,7 @@ public class TestSourcePartitionedScheduler
         assertEquals(nextScheduleResult.getSplitsScheduled(), 0);
     }
 
-    private StageScheduler getSourcePartitionedScheduler(
+    private static StageScheduler getSourcePartitionedScheduler(
             StageExecutionPlan plan,
             SqlStageExecution stage,
             InternalNodeManager nodeManager,
@@ -551,7 +542,7 @@ public class TestSourcePartitionedScheduler
                 splitSource,
                 placementPolicy,
                 splitBatchSize,
-                new DynamicFilterService(metadata, typeOperators, new DynamicFilterConfig()),
+                new DynamicFilterService(),
                 () -> false);
     }
 
@@ -649,7 +640,7 @@ public class TestSourcePartitionedScheduler
                 nodeTaskMap,
                 queryExecutor,
                 new NoOpFailureDetector(),
-                new DynamicFilterService(metadata, typeOperators, new DynamicFilterConfig()),
+                new DynamicFilterService(),
                 new SplitSchedulerStats());
 
         stage.setOutputBuffers(createInitialEmptyOutputBuffers(PARTITIONED)

@@ -13,7 +13,6 @@
  */
 package io.prestosql.sql.planner;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.PeekingIterator;
@@ -23,8 +22,7 @@ import io.prestosql.Session;
 import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.OperatorNotFoundException;
 import io.prestosql.metadata.ResolvedFunction;
-import io.prestosql.spi.PrestoException;
-import io.prestosql.spi.function.InvocationConvention;
+import io.prestosql.spi.block.Block;
 import io.prestosql.spi.predicate.DiscreteValues;
 import io.prestosql.spi.predicate.Domain;
 import io.prestosql.spi.predicate.Marker;
@@ -33,11 +31,11 @@ import io.prestosql.spi.predicate.Range;
 import io.prestosql.spi.predicate.Ranges;
 import io.prestosql.spi.predicate.SortedRangeSet;
 import io.prestosql.spi.predicate.TupleDomain;
+import io.prestosql.spi.predicate.Utils;
 import io.prestosql.spi.predicate.ValueSet;
 import io.prestosql.spi.type.DoubleType;
 import io.prestosql.spi.type.RealType;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spi.type.VarcharType;
 import io.prestosql.sql.ExpressionUtils;
 import io.prestosql.sql.InterpretedFunctionInvoker;
@@ -65,7 +63,6 @@ import io.prestosql.type.TypeCoercion;
 
 import javax.annotation.Nullable;
 
-import java.lang.invoke.MethodHandle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -80,9 +77,6 @@ import static io.airlift.slice.SliceUtf8.countCodePoints;
 import static io.airlift.slice.SliceUtf8.getCodePointAt;
 import static io.airlift.slice.SliceUtf8.lengthOfCodePoint;
 import static io.airlift.slice.SliceUtf8.setCodePointAt;
-import static io.prestosql.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
-import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.NEVER_NULL;
-import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
 import static io.prestosql.spi.function.OperatorType.SATURATED_FLOOR_CAST;
 import static io.prestosql.spi.type.TypeUtils.isFloatingPointNaN;
 import static io.prestosql.sql.ExpressionUtils.and;
@@ -310,19 +304,17 @@ public final class DomainTranslator
      */
     public static ExtractionResult fromPredicate(
             Metadata metadata,
-            TypeOperators typeOperators,
             Session session,
             Expression predicate,
             TypeProvider types)
     {
-        return new Visitor(metadata, typeOperators, session, types, new TypeAnalyzer(new SqlParser(), metadata)).process(predicate, false);
+        return new Visitor(metadata, session, types, new TypeAnalyzer(new SqlParser(), metadata)).process(predicate, false);
     }
 
     private static class Visitor
             extends AstVisitor<ExtractionResult, Boolean>
     {
         private final Metadata metadata;
-        private final TypeOperators typeOperators;
         private final LiteralEncoder literalEncoder;
         private final Session session;
         private final TypeProvider types;
@@ -330,11 +322,10 @@ public final class DomainTranslator
         private final TypeAnalyzer typeAnalyzer;
         private final TypeCoercion typeCoercion;
 
-        private Visitor(Metadata metadata, TypeOperators typeOperators, Session session, TypeProvider types, TypeAnalyzer typeAnalyzer)
+        private Visitor(Metadata metadata, Session session, TypeProvider types, TypeAnalyzer typeAnalyzer)
         {
             this.metadata = requireNonNull(metadata, "metadata is null");
             this.literalEncoder = new LiteralEncoder(metadata);
-            this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
             this.session = requireNonNull(session, "session is null");
             this.types = requireNonNull(types, "types is null");
             this.functionInvoker = new InterpretedFunctionInvoker(metadata);
@@ -832,18 +823,11 @@ public final class DomainTranslator
 
         private int compareOriginalValueToCoerced(Type originalValueType, Object originalValue, Type coercedValueType, Object coercedValue)
         {
-            requireNonNull(originalValueType, "originalValueType is null");
-            requireNonNull(coercedValue, "coercedValue is null");
             ResolvedFunction castToOriginalTypeOperator = metadata.getCoercion(coercedValueType, originalValueType);
             Object coercedValueInOriginalType = functionInvoker.invoke(castToOriginalTypeOperator, session.toConnectorSession(), coercedValue);
-            MethodHandle comparisonOperator = typeOperators.getComparisonOperator(originalValueType, InvocationConvention.simpleConvention(FAIL_ON_NULL, NEVER_NULL, NEVER_NULL));
-            try {
-                return (int) (long) comparisonOperator.invoke(originalValue, coercedValueInOriginalType);
-            }
-            catch (Throwable throwable) {
-                Throwables.throwIfUnchecked(throwable);
-                throw new PrestoException(GENERIC_INTERNAL_ERROR, throwable);
-            }
+            Block originalValueBlock = Utils.nativeValueToBlock(originalValueType, originalValue);
+            Block coercedValueBlock = Utils.nativeValueToBlock(originalValueType, coercedValueInOriginalType);
+            return originalValueType.compareTo(originalValueBlock, 0, coercedValueBlock, 0);
         }
 
         @Override

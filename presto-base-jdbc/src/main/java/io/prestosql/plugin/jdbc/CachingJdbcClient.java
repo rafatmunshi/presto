@@ -48,7 +48,7 @@ import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Throwables.throwIfInstanceOf;
 import static java.util.Objects.requireNonNull;
 
-public class CachingJdbcClient
+public final class CachingJdbcClient
         implements JdbcClient
 {
     private final JdbcClient delegate;
@@ -272,13 +272,6 @@ public class CachingJdbcClient
     {
         delegate.dropSchema(identity, schemaName);
         invalidateSchemasCache();
-    }
-
-    @Override
-    public void setColumnComment(JdbcIdentity identity, JdbcTableHandle handle, JdbcColumnHandle column, Optional<String> comment)
-    {
-        delegate.setColumnComment(identity, handle, column, comment);
-        invalidateColumnsCache(identity, handle.getSchemaTableName());
     }
 
     @Override

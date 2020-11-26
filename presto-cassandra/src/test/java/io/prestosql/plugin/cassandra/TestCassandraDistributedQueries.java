@@ -50,25 +50,7 @@ public class TestCassandraDistributedQueries
     }
 
     @Override
-    protected boolean supportsDelete()
-    {
-        return false;
-    }
-
-    @Override
     protected boolean supportsViews()
-    {
-        return false;
-    }
-
-    @Override
-    protected boolean supportsCommentOnTable()
-    {
-        return false;
-    }
-
-    @Override
-    protected boolean supportsCommentOnColumn()
     {
         return false;
     }
@@ -122,6 +104,12 @@ public class TestCassandraDistributedQueries
     }
 
     @Override
+    public void testDelete()
+    {
+        // Cassandra connector currently does not support delete
+    }
+
+    @Override
     public void testShowColumns()
     {
         MaterializedResult actual = computeActual("SHOW COLUMNS FROM orders");
@@ -139,6 +127,13 @@ public class TestCassandraDistributedQueries
                 .build();
 
         assertEquals(actual, expectedParametrizedVarchar);
+    }
+
+    @Override
+    public void testCommentTable()
+    {
+        // Cassandra connector currently does not support comment on table
+        assertQueryFails("COMMENT ON TABLE orders IS 'hello'", "This connector does not support setting table comments");
     }
 
     @Override

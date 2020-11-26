@@ -15,8 +15,6 @@ package io.prestosql.tests.hive.util;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static io.prestosql.tests.utils.QueryExecutors.onPresto;
@@ -24,8 +22,6 @@ import static java.lang.String.format;
 
 public final class TableLocationUtils
 {
-    private static final Pattern ACID_LOCATION_PATTERN = Pattern.compile("(.*)/delta_[^/]+");
-
     private TableLocationUtils()
     {
     }
@@ -41,20 +37,7 @@ public final class TableLocationUtils
         for (int i = 0; i < partitionColumns; i++) {
             regex.insert(0, "/[^/]*");
         }
-        String tableLocation = getOnlyElement(onPresto().executeQuery(format("SELECT DISTINCT regexp_replace(\"$path\", '%s', '') FROM %s", regex.toString(), tableName)).column(1));
-
-        // trim the /delta_... suffix for ACID tables
-        Matcher acidLocationMatcher = ACID_LOCATION_PATTERN.matcher(tableLocation);
-        if (acidLocationMatcher.matches()) {
-            tableLocation = acidLocationMatcher.group(1);
-        }
-        return tableLocation;
-    }
-
-    public static String getTablePath(String tableName)
-            throws URISyntaxException
-    {
-        return getTablePath(tableName, 0);
+        return getOnlyElement(onPresto().executeQuery(format("SELECT DISTINCT regexp_replace(\"$path\", '%s', '') FROM %s", regex.toString(), tableName)).column(1));
     }
 
     public static String getTablePath(String tableName, int partitionColumns)

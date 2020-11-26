@@ -49,11 +49,8 @@ import static io.airlift.bytecode.expression.BytecodeExpressions.constantFalse;
 import static io.airlift.bytecode.expression.BytecodeExpressions.constantTrue;
 import static io.airlift.bytecode.expression.BytecodeExpressions.invokeStatic;
 import static io.airlift.bytecode.instruction.JumpInstruction.jump;
-import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.NEVER_NULL;
 import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.NULL_FLAG;
 import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
-import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.NULLABLE_RETURN;
-import static io.prestosql.spi.function.InvocationConvention.simpleConvention;
 import static io.prestosql.spi.function.OperatorType.EQUAL;
 import static io.prestosql.spi.function.OperatorType.HASH_CODE;
 import static io.prestosql.spi.function.OperatorType.INDETERMINATE;
@@ -132,8 +129,8 @@ public class InCodeGenerator
 
         SwitchGenerationCase switchGenerationCase = checkSwitchGenerationCase(type, testExpressions);
 
-        MethodHandle equalsMethodHandle = generatorContext.getScalarFunctionInvoker(resolvedEqualsFunction, Optional.of(simpleConvention(NULLABLE_RETURN, NEVER_NULL, NEVER_NULL))).getMethodHandle();
-        MethodHandle hashCodeMethodHandle = generatorContext.getScalarFunctionInvoker(resolvedHashCodeFunction, Optional.of(simpleConvention(FAIL_ON_NULL, NEVER_NULL))).getMethodHandle();
+        FunctionInvoker equalsInvoker = generatorContext.getScalarFunctionInvoker(resolvedEqualsFunction, Optional.empty());
+        FunctionInvoker hashCodeInvoker = generatorContext.getScalarFunctionInvoker(resolvedHashCodeFunction, Optional.empty());
         InvocationConvention indeterminateCallingConvention = new InvocationConvention(ImmutableList.of(NULL_FLAG), FAIL_ON_NULL, false, false);
         FunctionInvoker indeterminateInvoker = generatorContext.getScalarFunctionInvoker(resolvedIsIndeterminate, Optional.of(indeterminateCallingConvention));
 
@@ -154,7 +151,7 @@ public class InCodeGenerator
                         break;
                     case HASH_SWITCH:
                         try {
-                            int hashCode = Long.hashCode((Long) hashCodeMethodHandle.invoke(object));
+                            int hashCode = Long.hashCode((Long) hashCodeInvoker.getMethodHandle().invoke(object));
                             hashBucketsBuilder.put(hashCode, testBytecode);
                         }
                         catch (Throwable throwable) {
@@ -220,7 +217,7 @@ public class InCodeGenerator
                 switchBuilder.defaultCase(jump(defaultLabel));
                 Binding hashCodeBinding = generatorContext
                         .getCallSiteBinder()
-                        .bind(hashCodeMethodHandle);
+                        .bind(hashCodeInvoker.getMethodHandle());
                 switchBlock = new BytecodeBlock()
                         .comment("lookupSwitch(hashCode(<stackValue>))")
                         .getVariable(value)
@@ -230,7 +227,7 @@ public class InCodeGenerator
                         .append(switchBuilder.build());
                 break;
             case SET_CONTAINS:
-                Set<?> constantValuesSet = toFastutilHashSet(constantValues, type, hashCodeMethodHandle, equalsMethodHandle);
+                Set<?> constantValuesSet = toFastutilHashSet(constantValues, type, hashCodeInvoker, equalsInvoker);
                 Binding constant = generatorContext.getCallSiteBinder().bind(constantValuesSet, constantValuesSet.getClass());
 
                 switchBlock = new BytecodeBlock()

@@ -13,7 +13,6 @@
  */
 package io.prestosql.plugin.phoenix;
 
-import com.google.common.collect.ImmutableMap;
 import io.prestosql.Session;
 import io.prestosql.plugin.jdbc.UnsupportedTypeHandling;
 import io.prestosql.testing.AbstractTestIntegrationSmokeTest;
@@ -43,7 +42,7 @@ public class TestPhoenixIntegrationSmokeTest
             throws Exception
     {
         testingPhoenixServer = TestingPhoenixServer.getInstance();
-        return createPhoenixQueryRunner(testingPhoenixServer, ImmutableMap.of());
+        return createPhoenixQueryRunner(testingPhoenixServer);
     }
 
     @AfterClass(alwaysRun = true)

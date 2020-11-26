@@ -16,28 +16,25 @@ package io.prestosql.sql.parser;
 import io.prestosql.sql.tree.NodeLocation;
 import org.antlr.v4.runtime.RecognitionException;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.String.format;
 
 public class ParsingException
         extends RuntimeException
 {
     private final int line;
-    private final int column;
+    private final int charPositionInLine;
 
-    public ParsingException(String message, RecognitionException cause, int line, int column)
+    public ParsingException(String message, RecognitionException cause, int line, int charPositionInLine)
     {
         super(message, cause);
-        checkArgument(line > 0, "line must be > 0");
-        checkArgument(column > 0, "column must be > 0");
 
         this.line = line;
-        this.column = column;
+        this.charPositionInLine = charPositionInLine;
     }
 
     public ParsingException(String message)
     {
-        this(message, null, 1, 1);
+        this(message, null, 1, 0);
     }
 
     public ParsingException(String message, NodeLocation nodeLocation)
@@ -52,7 +49,7 @@ public class ParsingException
 
     public int getColumnNumber()
     {
-        return column;
+        return charPositionInLine + 1;
     }
 
     public String getErrorMessage()

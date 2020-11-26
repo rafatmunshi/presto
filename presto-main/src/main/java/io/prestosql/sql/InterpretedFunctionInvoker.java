@@ -35,7 +35,6 @@ import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentC
 import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.NEVER_NULL;
 import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
 import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.NULLABLE_RETURN;
-import static io.prestosql.type.FunctionType.NAME;
 import static java.lang.invoke.MethodHandleProxies.asInterfaceInstance;
 import static java.util.Objects.requireNonNull;
 
@@ -86,7 +85,6 @@ public class InterpretedFunctionInvoker
             actualArguments.add(session);
         }
 
-        int lambdaArgumentIndex = 0;
         for (int i = 0; i < arguments.size(); i++) {
             Object argument = arguments.get(i);
 
@@ -95,9 +93,9 @@ public class InterpretedFunctionInvoker
                 return null;
             }
 
-            if (functionMetadata.getSignature().getArgumentTypes().get(i).getBase().equals(NAME)) {
-                argument = asInterfaceInstance(invoker.getLambdaInterfaces().get(lambdaArgumentIndex), (MethodHandle) argument);
-                lambdaArgumentIndex++;
+            Optional<Class<?>> lambdaInterface = invoker.getLambdaInterfaces().get(i);
+            if (lambdaInterface.isPresent()) {
+                argument = asInterfaceInstance(lambdaInterface.get(), (MethodHandle) argument);
             }
 
             actualArguments.add(argument);

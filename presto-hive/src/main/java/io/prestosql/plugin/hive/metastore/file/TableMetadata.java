@@ -30,7 +30,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static io.prestosql.plugin.hive.metastore.StorageFormat.VIEW_STORAGE_FORMAT;
@@ -280,7 +279,6 @@ public class TableMetadata
                 partitionColumns,
                 parameters,
                 viewOriginalText,
-                viewExpandedText,
-                OptionalLong.empty());
+                viewExpandedText);
     }
 }

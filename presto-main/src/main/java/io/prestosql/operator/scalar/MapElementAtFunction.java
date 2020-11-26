@@ -102,8 +102,7 @@ public class MapElementAtFunction
         methodHandle = methodHandle.bindTo(keyEqualsMethod).bindTo(keyType).bindTo(valueType);
         methodHandle = methodHandle.asType(methodHandle.type().changeReturnType(Primitives.wrap(valueType.getJavaType())));
 
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 NULLABLE_RETURN,
                 ImmutableList.of(NEVER_NULL, NEVER_NULL),
                 methodHandle);

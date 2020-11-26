@@ -29,9 +29,6 @@ import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.TypeSignature;
-import io.prestosql.type.BlockTypeOperators;
-import io.prestosql.type.BlockTypeOperators.BlockPositionEqual;
-import io.prestosql.type.BlockTypeOperators.BlockPositionHashCode;
 
 import java.lang.invoke.MethodHandle;
 import java.util.List;
@@ -59,9 +56,9 @@ public class Histogram
     private static final MethodHandle COMBINE_FUNCTION = methodHandle(Histogram.class, "combine", HistogramState.class, HistogramState.class);
 
     public static final int EXPECTED_SIZE_FOR_HASHING = 10;
-    private final BlockTypeOperators blockTypeOperators;
+    private final HistogramGroupImplementation groupMode;
 
-    public Histogram(BlockTypeOperators blockTypeOperators)
+    public Histogram(HistogramGroupImplementation groupMode)
     {
         super(
                 new FunctionMetadata(
@@ -80,36 +77,34 @@ public class Histogram
                         AGGREGATE),
                 true,
                 false);
-        this.blockTypeOperators = blockTypeOperators;
+        this.groupMode = groupMode;
     }
 
     @Override
     public List<TypeSignature> getIntermediateTypes(FunctionBinding functionBinding)
     {
+        Type keyType = functionBinding.getTypeVariable("K");
         Type outputType = functionBinding.getBoundSignature().getReturnType();
-        return ImmutableList.of(outputType.getTypeSignature());
+        return ImmutableList.of(new HistogramStateSerializer(keyType, outputType).getSerializedType().getTypeSignature());
     }
 
     @Override
     public InternalAggregationFunction specialize(FunctionBinding functionBinding)
     {
         Type keyType = functionBinding.getTypeVariable("K");
-        BlockPositionEqual keyEqual = blockTypeOperators.getEqualOperator(keyType);
-        BlockPositionHashCode keyHashCode = blockTypeOperators.getHashCodeOperator(keyType);
         Type outputType = functionBinding.getBoundSignature().getReturnType();
-        return generateAggregation(NAME, keyType, keyEqual, keyHashCode, outputType);
+        return generateAggregation(NAME, keyType, outputType, groupMode);
     }
 
     private static InternalAggregationFunction generateAggregation(
             String functionName,
             Type keyType,
-            BlockPositionEqual keyEqual,
-            BlockPositionHashCode keyHashCode,
-            Type outputType)
+            Type outputType,
+            HistogramGroupImplementation groupMode)
     {
         DynamicClassLoader classLoader = new DynamicClassLoader(Histogram.class.getClassLoader());
         List<Type> inputTypes = ImmutableList.of(keyType);
-        HistogramStateSerializer stateSerializer = new HistogramStateSerializer(outputType);
+        HistogramStateSerializer stateSerializer = new HistogramStateSerializer(keyType, outputType);
         Type intermediateType = stateSerializer.getSerializedType();
         MethodHandle inputFunction = INPUT_FUNCTION.bindTo(keyType);
         MethodHandle outputFunction = OUTPUT_FUNCTION.bindTo(outputType);
@@ -124,7 +119,7 @@ public class Histogram
                 ImmutableList.of(new AccumulatorStateDescriptor(
                         HistogramState.class,
                         stateSerializer,
-                        new HistogramStateFactory(keyType, keyEqual, keyHashCode, EXPECTED_SIZE_FOR_HASHING))),
+                        new HistogramStateFactory(keyType, EXPECTED_SIZE_FOR_HASHING, groupMode))),
                 outputType);
 
         GenericAccumulatorFactoryBinder factory = AccumulatorCompiler.generateAccumulatorFactoryBinder(metadata, classLoader);

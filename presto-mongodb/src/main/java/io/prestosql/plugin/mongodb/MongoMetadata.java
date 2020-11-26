@@ -171,12 +171,6 @@ public class MongoMetadata
     }
 
     @Override
-    public void addColumn(ConnectorSession session, ConnectorTableHandle tableHandle, ColumnMetadata column)
-    {
-        mongoSession.addColumn(((MongoTableHandle) tableHandle).getSchemaTableName(), column);
-    }
-
-    @Override
     public ConnectorOutputTableHandle beginCreateTable(ConnectorSession session, ConnectorTableMetadata tableMetadata, Optional<ConnectorNewTableLayout> layout)
     {
         List<MongoColumnHandle> columns = buildColumnHandles(tableMetadata);

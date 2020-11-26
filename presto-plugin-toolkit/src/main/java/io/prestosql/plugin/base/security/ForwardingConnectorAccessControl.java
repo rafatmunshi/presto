@@ -169,12 +169,6 @@ public abstract class ForwardingConnectorAccessControl
     }
 
     @Override
-    public void checkCanSetTableAuthorization(ConnectorSecurityContext context, SchemaTableName tableName, PrestoPrincipal principal)
-    {
-        delegate().checkCanSetTableAuthorization(context, tableName, principal);
-    }
-
-    @Override
     public void checkCanSelectFromColumns(ConnectorSecurityContext context, SchemaTableName tableName, Set<String> columnNames)
     {
         delegate().checkCanSelectFromColumns(context, tableName, columnNames);
@@ -220,18 +214,6 @@ public abstract class ForwardingConnectorAccessControl
     public void checkCanSetCatalogSessionProperty(ConnectorSecurityContext context, String propertyName)
     {
         delegate().checkCanSetCatalogSessionProperty(context, propertyName);
-    }
-
-    @Override
-    public void checkCanGrantSchemaPrivilege(ConnectorSecurityContext context, Privilege privilege, String schemaName, PrestoPrincipal grantee, boolean grantOption)
-    {
-        delegate().checkCanGrantSchemaPrivilege(context, privilege, schemaName, grantee, grantOption);
-    }
-
-    @Override
-    public void checkCanRevokeSchemaPrivilege(ConnectorSecurityContext context, Privilege privilege, String schemaName, PrestoPrincipal revokee, boolean grantOption)
-    {
-        delegate().checkCanRevokeSchemaPrivilege(context, privilege, schemaName, revokee, grantOption);
     }
 
     @Override

@@ -58,7 +58,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotEquals;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
 
-@Test(singleThreaded = true) // see @BeforeMethod
 public class TestDbSessionPropertyManagerIntegration
 {
     private DistributedQueryRunner queryRunner;

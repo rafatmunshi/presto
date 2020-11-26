@@ -42,7 +42,6 @@ import io.prestosql.sql.relational.RowExpression;
 import io.prestosql.sql.tree.QualifiedName;
 import io.prestosql.testing.MaterializedResult;
 import io.prestosql.testing.TestingSplit;
-import org.testng.annotations.AfterClass;
 import org.testng.annotations.Test;
 
 import java.util.List;
@@ -82,16 +81,13 @@ public class TestScanFilterAndProjectOperator
 {
     private final Metadata metadata = createTestMetadataManager();
     private final ExpressionCompiler expressionCompiler = new ExpressionCompiler(metadata, new PageFunctionCompiler(metadata, 0));
-    private ExecutorService executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-%s"));
-    private ScheduledExecutorService scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+    private ExecutorService executor;
+    private ScheduledExecutorService scheduledExecutor;
 
-    @AfterClass(alwaysRun = true)
-    public void tearDown()
+    public TestScanFilterAndProjectOperator()
     {
-        executor.shutdownNow();
-        executor = null;
-        scheduledExecutor.shutdownNow();
-        scheduledExecutor = null;
+        executor = newCachedThreadPool(daemonThreadsNamed("test-executor-%s"));
+        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("test-scheduledExecutor-%s"));
     }
 
     @Test

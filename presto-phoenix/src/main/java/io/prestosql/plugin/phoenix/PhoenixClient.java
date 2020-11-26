@@ -143,7 +143,6 @@ import static org.apache.hadoop.hbase.HConstants.FOREVER;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK;
 import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 import static org.apache.phoenix.util.SchemaUtil.ESCAPE_CHARACTER;
-import static org.apache.phoenix.util.SchemaUtil.getEscapedArgument;
 
 public class PhoenixClient
         extends BaseJdbcClient
@@ -390,7 +389,7 @@ public class PhoenixClient
                     typeStatement += " not null";
                     pkNames.add(columnName);
                 }
-                columnList.add(format("%s %s", getEscapedArgument(columnName), typeStatement));
+                columnList.add(format("%s %s", columnName, typeStatement));
             }
 
             ImmutableList.Builder<String> tableOptions = ImmutableList.builder();

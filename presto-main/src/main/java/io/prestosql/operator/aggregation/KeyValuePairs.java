@@ -17,8 +17,6 @@ import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators.BlockPositionEqual;
-import io.prestosql.type.BlockTypeOperators.BlockPositionHashCode;
 import org.openjdk.jol.info.ClassLayout;
 
 import java.util.Arrays;
@@ -27,6 +25,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static io.airlift.slice.SizeOf.sizeOf;
 import static io.prestosql.spi.StandardErrorCode.GENERIC_INSUFFICIENT_RESOURCES;
 import static io.prestosql.type.TypeUtils.expectedValueSize;
+import static io.prestosql.type.TypeUtils.hashPosition;
+import static io.prestosql.type.TypeUtils.positionEqualsPosition;
 import static it.unimi.dsi.fastutil.HashCommon.arraySize;
 import static java.util.Objects.requireNonNull;
 
@@ -40,8 +40,6 @@ public class KeyValuePairs
 
     private final BlockBuilder keyBlockBuilder;
     private final Type keyType;
-    private final BlockPositionEqual keyEqualOperator;
-    private final BlockPositionHashCode keyHashCodeOperator;
 
     private final BlockBuilder valueBlockBuilder;
     private final Type valueType;
@@ -51,16 +49,10 @@ public class KeyValuePairs
     private int maxFill;
     private int hashMask;
 
-    public KeyValuePairs(
-            Type keyType,
-            BlockPositionEqual keyEqualOperator,
-            BlockPositionHashCode keyHashCodeOperator,
-            Type valueType)
+    public KeyValuePairs(Type keyType, Type valueType)
     {
         this.keyType = requireNonNull(keyType, "keyType is null");
         this.valueType = requireNonNull(valueType, "valueType is null");
-        this.keyEqualOperator = requireNonNull(keyEqualOperator, "keyEqualOperator is null");
-        this.keyHashCodeOperator = requireNonNull(keyHashCodeOperator, "keyHashCodeOperator is null");
         keyBlockBuilder = this.keyType.createBlockBuilder(null, EXPECTED_ENTRIES, expectedValueSize(keyType, EXPECTED_ENTRY_SIZE));
         valueBlockBuilder = this.valueType.createBlockBuilder(null, EXPECTED_ENTRIES, expectedValueSize(valueType, EXPECTED_ENTRY_SIZE));
         hashCapacity = arraySize(EXPECTED_ENTRIES, FILL_RATIO);
@@ -70,15 +62,9 @@ public class KeyValuePairs
         Arrays.fill(keyPositionByHash, EMPTY_SLOT);
     }
 
-    public KeyValuePairs(
-            Block serialized,
-            Type keyType,
-            BlockPositionEqual keyEqualOperator,
-            BlockPositionHashCode keyHashCodeOperator,
-            Type valueType)
-
+    public KeyValuePairs(Block serialized, Type keyType, Type valueType)
     {
-        this(keyType, keyEqualOperator, keyHashCodeOperator, valueType);
+        this(keyType, valueType);
         deserialize(requireNonNull(serialized, "serialized is null"));
     }
 
@@ -156,12 +142,12 @@ public class KeyValuePairs
 
     private int getHashPositionOfKey(Block key, int position)
     {
-        int hashPosition = getMaskedHash(keyHashCodeOperator.hashCodeNullSafe(key, position));
+        int hashPosition = getMaskedHash(hashPosition(keyType, key, position));
         while (true) {
             if (keyPositionByHash[hashPosition] == EMPTY_SLOT) {
                 return hashPosition;
             }
-            if (keyEqualOperator.equalNullSafe(keyBlockBuilder, keyPositionByHash[hashPosition], key, position)) {
+            if (positionEqualsPosition(keyType, keyBlockBuilder, keyPositionByHash[hashPosition], key, position)) {
                 return hashPosition;
             }
             hashPosition = getMaskedHash(hashPosition + 1);

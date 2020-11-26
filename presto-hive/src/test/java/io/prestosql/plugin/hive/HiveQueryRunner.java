@@ -23,9 +23,7 @@ import io.prestosql.metadata.QualifiedObjectName;
 import io.prestosql.plugin.hive.authentication.HiveIdentity;
 import io.prestosql.plugin.hive.metastore.Database;
 import io.prestosql.plugin.hive.metastore.HiveMetastore;
-import io.prestosql.plugin.hive.metastore.MetastoreConfig;
 import io.prestosql.plugin.hive.metastore.file.FileHiveMetastore;
-import io.prestosql.plugin.hive.metastore.file.FileHiveMetastoreConfig;
 import io.prestosql.plugin.hive.testing.TestingHivePlugin;
 import io.prestosql.plugin.tpch.TpchPlugin;
 import io.prestosql.spi.security.Identity;
@@ -92,13 +90,7 @@ public final class HiveQueryRunner
         private List<TpchTable<?>> initialTables = ImmutableList.of();
         private Function<DistributedQueryRunner, HiveMetastore> metastore = queryRunner -> {
             File baseDir = queryRunner.getCoordinator().getBaseDataDir().resolve("hive_data").toFile();
-            return new FileHiveMetastore(
-                    HDFS_ENVIRONMENT,
-                    new MetastoreConfig(),
-                    new FileHiveMetastoreConfig()
-                            .setCatalogDirectory(baseDir.toURI().toString())
-                            .setMetastoreUser("test")
-                            .setAssumeCanonicalPartitionKeys(true));
+            return new FileHiveMetastore(HDFS_ENVIRONMENT, baseDir.toURI().toString(), "test", true);
         };
         private Module module = EMPTY_MODULE;
 
@@ -296,6 +288,7 @@ public final class HiveQueryRunner
         DistributedQueryRunner queryRunner = HiveQueryRunner.builder()
                 .setHiveProperties(ImmutableMap.of())
                 .setInitialTables(TpchTable.getTables())
+                .setNodeCount(4)
                 .setExtraProperties(ImmutableMap.of("http-server.http.port", "8080"))
                 .setBaseDataDir(baseDataDir)
                 .build();

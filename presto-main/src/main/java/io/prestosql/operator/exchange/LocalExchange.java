@@ -20,7 +20,6 @@ import io.prestosql.execution.Lifespan;
 import io.prestosql.operator.PipelineExecutionStrategy;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.planner.PartitioningHandle;
-import io.prestosql.type.BlockTypeOperators;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -84,8 +83,7 @@ public class LocalExchange
             List<? extends Type> types,
             List<Integer> partitionChannels,
             Optional<Integer> partitionHashChannel,
-            DataSize maxBufferedBytes,
-            BlockTypeOperators blockTypeOperators)
+            DataSize maxBufferedBytes)
     {
         this.allSinkFactories = Stream.generate(() -> new LocalExchangeSinkFactory(LocalExchange.this))
                 .limit(sinkFactoryCount)
@@ -114,7 +112,7 @@ public class LocalExchange
             exchangerSupplier = () -> new RandomExchanger(buffers, memoryManager);
         }
         else if (partitioning.equals(FIXED_HASH_DISTRIBUTION)) {
-            exchangerSupplier = () -> new PartitioningExchanger(buffers, memoryManager, types, partitionChannels, partitionHashChannel, blockTypeOperators);
+            exchangerSupplier = () -> new PartitioningExchanger(buffers, memoryManager, types, partitionChannels, partitionHashChannel);
         }
         else if (partitioning.equals(FIXED_PASSTHROUGH_DISTRIBUTION)) {
             Iterator<LocalExchangeSource> sourceIterator = this.sources.iterator();
@@ -265,7 +263,6 @@ public class LocalExchange
         private final Optional<Integer> partitionHashChannel;
         private final PipelineExecutionStrategy exchangeSourcePipelineExecutionStrategy;
         private final DataSize maxBufferedBytes;
-        private final BlockTypeOperators blockTypeOperators;
         private final int bufferCount;
 
         @GuardedBy("this")
@@ -287,8 +284,7 @@ public class LocalExchange
                 List<Integer> partitionChannels,
                 Optional<Integer> partitionHashChannel,
                 PipelineExecutionStrategy exchangeSourcePipelineExecutionStrategy,
-                DataSize maxBufferedBytes,
-                BlockTypeOperators blockTypeOperators)
+                DataSize maxBufferedBytes)
         {
             this.partitioning = requireNonNull(partitioning, "partitioning is null");
             this.types = requireNonNull(types, "types is null");
@@ -296,7 +292,6 @@ public class LocalExchange
             this.partitionHashChannel = requireNonNull(partitionHashChannel, "partitionHashChannel is null");
             this.exchangeSourcePipelineExecutionStrategy = requireNonNull(exchangeSourcePipelineExecutionStrategy, "exchangeSourcePipelineExecutionStrategy is null");
             this.maxBufferedBytes = requireNonNull(maxBufferedBytes, "maxBufferedBytes is null");
-            this.blockTypeOperators = requireNonNull(blockTypeOperators, "blockTypeOperators is null");
 
             this.bufferCount = computeBufferCount(partitioning, defaultConcurrency, partitionChannels);
         }
@@ -330,7 +325,7 @@ public class LocalExchange
             return localExchangeMap.computeIfAbsent(lifespan, ignored -> {
                 checkState(noMoreSinkFactories);
                 LocalExchange localExchange =
-                        new LocalExchange(numSinkFactories, bufferCount, partitioning, types, partitionChannels, partitionHashChannel, maxBufferedBytes, blockTypeOperators);
+                        new LocalExchange(numSinkFactories, bufferCount, partitioning, types, partitionChannels, partitionHashChannel, maxBufferedBytes);
                 for (LocalExchangeSinkFactoryId closedSinkFactoryId : closedSinkFactories) {
                     localExchange.getSinkFactory(closedSinkFactoryId).close();
                 }

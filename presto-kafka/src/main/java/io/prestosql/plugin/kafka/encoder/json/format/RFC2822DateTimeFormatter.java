@@ -23,6 +23,7 @@ import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 
 import java.util.Locale;
+import java.util.TimeZone;
 
 import static io.prestosql.spi.type.TimestampType.TIMESTAMP_MILLIS;
 import static io.prestosql.spi.type.TimestampWithTimeZoneType.TIMESTAMP_TZ_MILLIS;
@@ -50,7 +51,7 @@ public class RFC2822DateTimeFormatter
     @Override
     public String formatTimestampWithZone(SqlTimestampWithTimeZone value)
     {
-        DateTimeZone dateTimeZone = DateTimeZone.forID(value.getTimeZoneKey().getId());
+        DateTimeZone dateTimeZone = DateTimeZone.forTimeZone(TimeZone.getTimeZone(value.getTimeZoneKey().getZoneId()));
         return RFC_FORMATTER.withZone(dateTimeZone).print(new DateTime(value.getEpochMillis(), dateTimeZone));
     }
 }

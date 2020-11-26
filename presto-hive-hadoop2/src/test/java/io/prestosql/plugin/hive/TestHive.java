@@ -17,11 +17,9 @@ import org.apache.hadoop.net.NetUtils;
 import org.testng.SkipException;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Parameters;
-import org.testng.annotations.Test;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class TestHive
         extends AbstractTestHive
@@ -66,31 +64,5 @@ public class TestHive
         }
 
         super.testGetPartitionSplitsTableOfflinePartition();
-    }
-
-    @Override
-    public void testHideDeltaLakeTables()
-    {
-        assertThatThrownBy(super::testHideDeltaLakeTables)
-                .hasMessageMatching("(?s)\n" +
-                        "Expecting\n" +
-                        " <\\[.*\\b(\\w+.tmp_presto_test_presto_delta_lake_table_\\w+)\\b.*]>\n" +
-                        "not to contain\n" +
-                        " <\\[\\1]>\n" +
-                        "but found.*");
-
-        throw new SkipException("not supported");
-    }
-
-    @Test
-    public void testHiveViewTranslationError()
-    {
-        try (Transaction transaction = newTransaction()) {
-            assertThatThrownBy(() -> transaction.getMetadata().getView(newSession(), view))
-                    .isInstanceOf(HiveViewNotSupportedException.class)
-                    .hasMessageContaining("Hive views are not supported");
-
-            // TODO: combine this with tests for successful translation (currently in TestHiveViews product test)
-        }
     }
 }

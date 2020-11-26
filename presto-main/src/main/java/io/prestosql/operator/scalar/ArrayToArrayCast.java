@@ -93,8 +93,7 @@ public class ArrayToArrayCast
         Function<InvocationConvention, FunctionInvoker> castInvokerProvider = invocationConvention -> functionDependencies.getCastInvoker(fromType, toType, Optional.of(invocationConvention));
         Class<?> castOperatorClass = generateArrayCast(fromType, toType, castMetadata, castInvokerProvider);
         MethodHandle methodHandle = methodHandle(castOperatorClass, "castArray", ConnectorSession.class, Block.class);
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 ImmutableList.of(NEVER_NULL),
                 methodHandle);

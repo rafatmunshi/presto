@@ -19,7 +19,6 @@ import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.type.ArrayType;
 import io.prestosql.spi.type.RowType;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators.BlockPositionComparison;
 import org.openjdk.jol.info.ClassLayout;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -34,7 +33,7 @@ public class TypedKeyValueHeap
     private static final int COMPACT_THRESHOLD_BYTES = 32768;
     private static final int COMPACT_THRESHOLD_RATIO = 3; // when 2/3 of elements in keyBlockBuilder is unreferenced, do compact
 
-    private final BlockPositionComparison keyComparison;
+    private final BlockComparator keyComparator;
     private final Type keyType;
     private final Type valueType;
     private final int capacity;
@@ -44,9 +43,9 @@ public class TypedKeyValueHeap
     private BlockBuilder keyBlockBuilder;
     private BlockBuilder valueBlockBuilder;
 
-    public TypedKeyValueHeap(BlockPositionComparison keyComparison, Type keyType, Type valueType, int capacity)
+    public TypedKeyValueHeap(BlockComparator keyComparator, Type keyType, Type valueType, int capacity)
     {
-        this.keyComparison = keyComparison;
+        this.keyComparator = keyComparator;
         this.keyType = keyType;
         this.valueType = valueType;
         this.capacity = capacity;
@@ -95,12 +94,12 @@ public class TypedKeyValueHeap
         out.closeEntry();
     }
 
-    public static TypedKeyValueHeap deserialize(Block block, Type keyType, Type valueType, BlockPositionComparison comparison)
+    public static TypedKeyValueHeap deserialize(Block block, Type keyType, Type valueType, BlockComparator blockComparator)
     {
         int capacity = toIntExact(BIGINT.getLong(block, 0));
         Block keysBlock = new ArrayType(keyType).getObject(block, 1);
         Block valuesBlock = new ArrayType(valueType).getObject(block, 2);
-        TypedKeyValueHeap heap = new TypedKeyValueHeap(comparison, keyType, valueType, capacity);
+        TypedKeyValueHeap heap = new TypedKeyValueHeap(blockComparator, keyType, valueType, capacity);
         heap.addAll(keysBlock, valuesBlock);
         return heap;
     }
@@ -129,7 +128,7 @@ public class TypedKeyValueHeap
     {
         checkArgument(!keyBlock.isNull(position));
         if (positionCount == capacity) {
-            if (keyComparison.compare(keyBlockBuilder, heapIndex[0], keyBlock, position) >= 0) {
+            if (keyComparator.compareTo(keyBlockBuilder, heapIndex[0], keyBlock, position) >= 0) {
                 return; // and new element is not larger than heap top: do not add
             }
             heapIndex[0] = keyBlockBuilder.getPositionCount();
@@ -173,9 +172,9 @@ public class TypedKeyValueHeap
                 smallerChildPosition = leftPosition;
             }
             else {
-                smallerChildPosition = keyComparison.compare(keyBlockBuilder, heapIndex[leftPosition], keyBlockBuilder, heapIndex[rightPosition]) >= 0 ? rightPosition : leftPosition;
+                smallerChildPosition = keyComparator.compareTo(keyBlockBuilder, heapIndex[leftPosition], keyBlockBuilder, heapIndex[rightPosition]) >= 0 ? rightPosition : leftPosition;
             }
-            if (keyComparison.compare(keyBlockBuilder, heapIndex[smallerChildPosition], keyBlockBuilder, heapIndex[position]) >= 0) {
+            if (keyComparator.compareTo(keyBlockBuilder, heapIndex[smallerChildPosition], keyBlockBuilder, heapIndex[position]) >= 0) {
                 break; // child is larger or equal
             }
             int swapTemp = heapIndex[position];
@@ -190,7 +189,7 @@ public class TypedKeyValueHeap
         int position = positionCount - 1;
         while (position != 0) {
             int parentPosition = (position - 1) / 2;
-            if (keyComparison.compare(keyBlockBuilder, heapIndex[position], keyBlockBuilder, heapIndex[parentPosition]) >= 0) {
+            if (keyComparator.compareTo(keyBlockBuilder, heapIndex[position], keyBlockBuilder, heapIndex[parentPosition]) >= 0) {
                 break; // child is larger or equal
             }
             int swapTemp = heapIndex[position];

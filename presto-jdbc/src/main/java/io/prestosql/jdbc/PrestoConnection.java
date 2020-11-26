@@ -81,6 +81,7 @@ public class PrestoConnection
     private final AtomicReference<String> schema = new AtomicReference<>();
     private final AtomicReference<String> path = new AtomicReference<>();
     private final AtomicReference<ZoneId> timeZoneId = new AtomicReference<>();
+    private final AtomicBoolean useSessionTimeZone = new AtomicBoolean();
     private final AtomicReference<Locale> locale = new AtomicReference<>();
     private final AtomicReference<Integer> networkTimeoutMillis = new AtomicReference<>(Ints.saturatedCast(MINUTES.toMillis(2)));
     private final AtomicReference<ServerInfo> serverInfo = new AtomicReference<>();
@@ -91,7 +92,6 @@ public class PrestoConnection
     private final String user;
     private final Map<String, String> extraCredentials;
     private final Optional<String> applicationNamePrefix;
-    private final Optional<String> source;
     private final Map<ClientInfoProperty, String> clientInfo = new ConcurrentHashMap<>();
     private final Map<String, String> sessionProperties = new ConcurrentHashMap<>();
     private final Map<String, String> preparedStatements = new ConcurrentHashMap<>();
@@ -109,7 +109,6 @@ public class PrestoConnection
         this.catalog.set(uri.getCatalog());
         this.user = uri.getUser();
         this.applicationNamePrefix = uri.getApplicationNamePrefix();
-        this.source = uri.getSource();
         this.extraCredentials = uri.getExtraCredentials();
         this.queryExecutor = requireNonNull(queryExecutor, "queryExecutor is null");
         uri.getClientInfo().ifPresent(tags -> clientInfo.put(CLIENT_INFO, tags));
@@ -118,6 +117,7 @@ public class PrestoConnection
 
         roles.putAll(uri.getRoles());
         timeZoneId.set(ZoneId.systemDefault());
+        useSessionTimeZone.set(uri.useSessionTimezone().orElse(false));
         locale.set(Locale.getDefault());
         sessionProperties.putAll(uri.getSessionProperties());
     }
@@ -551,9 +551,14 @@ public class PrestoConnection
         return schema.get();
     }
 
+    ZoneId getTimeZone()
+    {
+        return timeZoneId.get();
+    }
+
     public String getTimeZoneId()
     {
-        return timeZoneId.get().getId();
+        return getTimeZone().getId();
     }
 
     public void setTimeZoneId(String timeZoneId)
@@ -690,7 +695,17 @@ public class PrestoConnection
 
     StatementClient startQuery(String sql, Map<String, String> sessionPropertiesOverride)
     {
-        String source = getActualSource();
+        String source = "presto-jdbc";
+        String applicationName = clientInfo.get(APPLICATION_NAME);
+        if (applicationNamePrefix.isPresent()) {
+            source = applicationNamePrefix.get();
+            if (applicationName != null) {
+                source += applicationName;
+            }
+        }
+        else if (applicationName != null) {
+            source = applicationName;
+        }
 
         Iterable<String> clientTags = Splitter.on(',').trimResults().omitEmptyStrings()
                 .split(nullToEmpty(clientInfo.get(CLIENT_TAGS)));
@@ -713,6 +728,7 @@ public class PrestoConnection
                 schema.get(),
                 path.get(),
                 timeZoneId.get(),
+                useSessionTimeZone.get(),
                 locale.get(),
                 ImmutableMap.of(),
                 ImmutableMap.copyOf(allProperties),
@@ -788,24 +804,5 @@ public class PrestoConnection
                 return "SERIALIZABLE";
         }
         throw new SQLException("Invalid transaction isolation level: " + level);
-    }
-
-    private String getActualSource()
-    {
-        if (source.isPresent()) {
-            return source.get();
-        }
-        String source = "presto-jdbc";
-        String applicationName = clientInfo.get(APPLICATION_NAME);
-        if (applicationNamePrefix.isPresent()) {
-            source = applicationNamePrefix.get();
-            if (applicationName != null) {
-                source += applicationName;
-            }
-        }
-        else if (applicationName != null) {
-            source = applicationName;
-        }
-        return source;
     }
 }

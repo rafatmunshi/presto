@@ -14,21 +14,18 @@
 package io.prestosql.operator;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.primitives.Ints;
 import io.prestosql.operator.scalar.CombineHashFunction;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.planner.optimizations.HashGenerationOptimizer;
-import io.prestosql.type.BlockTypeOperators;
-import io.prestosql.type.BlockTypeOperators.BlockPositionHashCode;
+import io.prestosql.type.TypeUtils;
 
 import java.util.List;
 import java.util.function.IntFunction;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.Objects.requireNonNull;
 
 public class InterpretedHashGenerator
@@ -36,21 +33,17 @@ public class InterpretedHashGenerator
 {
     private final List<Type> hashChannelTypes;
     private final int[] hashChannels;
-    private final List<BlockPositionHashCode> hashCodeOperators;
 
-    public InterpretedHashGenerator(List<Type> hashChannelTypes, List<Integer> hashChannels, BlockTypeOperators blockTypeOperators)
+    public InterpretedHashGenerator(List<Type> hashChannelTypes, List<Integer> hashChannels)
     {
-        this(hashChannelTypes, Ints.toArray(requireNonNull(hashChannels, "hashChannels is null")), blockTypeOperators);
+        this(hashChannelTypes, requireNonNull(hashChannels).stream().mapToInt(i -> i).toArray());
     }
 
-    public InterpretedHashGenerator(List<Type> hashChannelTypes, int[] hashChannels, BlockTypeOperators blockTypeOperators)
+    public InterpretedHashGenerator(List<Type> hashChannelTypes, int[] hashChannels)
     {
         this.hashChannels = requireNonNull(hashChannels, "hashChannels is null");
         this.hashChannelTypes = ImmutableList.copyOf(requireNonNull(hashChannelTypes, "hashChannelTypes is null"));
         checkArgument(hashChannelTypes.size() == hashChannels.length);
-        this.hashCodeOperators = hashChannelTypes.stream()
-                .map(blockTypeOperators::getHashCodeOperator)
-                .collect(toImmutableList());
     }
 
     @Override
@@ -63,8 +56,8 @@ public class InterpretedHashGenerator
     {
         long result = HashGenerationOptimizer.INITIAL_HASH_VALUE;
         for (int i = 0; i < hashChannels.length; i++) {
-            Block block = blockProvider.apply(hashChannels[i]);
-            result = CombineHashFunction.getHash(result, hashCodeOperators.get(i).hashCodeNullSafe(block, position));
+            Type type = hashChannelTypes.get(i);
+            result = CombineHashFunction.getHash(result, TypeUtils.hashPosition(type, blockProvider.apply(hashChannels[i]), position));
         }
         return result;
     }

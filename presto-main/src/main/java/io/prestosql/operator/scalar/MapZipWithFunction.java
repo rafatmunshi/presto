@@ -82,11 +82,10 @@ public final class MapZipWithFunction
         Type inputValueType1 = functionBinding.getTypeVariable("V1");
         Type inputValueType2 = functionBinding.getTypeVariable("V2");
         Type outputMapType = functionBinding.getBoundSignature().getReturnType();
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 ImmutableList.of(NEVER_NULL, NEVER_NULL, FUNCTION),
-                ImmutableList.of(MapZipWithLambda.class),
+                ImmutableList.of(Optional.empty(), Optional.empty(), Optional.of(MapZipWithLambda.class)),
                 METHOD_HANDLE.bindTo(keyType).bindTo(inputValueType1).bindTo(inputValueType2).bindTo(outputMapType),
                 Optional.of(STATE_FACTORY.bindTo(outputMapType)));
     }

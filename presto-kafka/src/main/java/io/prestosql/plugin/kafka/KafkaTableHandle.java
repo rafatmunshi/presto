@@ -16,11 +16,9 @@ package io.prestosql.plugin.kafka;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
-import io.prestosql.spi.connector.ColumnHandle;
 import io.prestosql.spi.connector.ConnectorInsertTableHandle;
 import io.prestosql.spi.connector.ConnectorTableHandle;
 import io.prestosql.spi.connector.SchemaTableName;
-import io.prestosql.spi.predicate.TupleDomain;
 
 import java.util.List;
 import java.util.Objects;
@@ -53,7 +51,6 @@ public final class KafkaTableHandle
     private final Optional<String> keyDataSchemaLocation;
     private final Optional<String> messageDataSchemaLocation;
     private final List<KafkaColumnHandle> columns;
-    private final TupleDomain<ColumnHandle> constraint;
 
     @JsonCreator
     public KafkaTableHandle(
@@ -64,8 +61,7 @@ public final class KafkaTableHandle
             @JsonProperty("messageDataFormat") String messageDataFormat,
             @JsonProperty("keyDataSchemaLocation") Optional<String> keyDataSchemaLocation,
             @JsonProperty("messageDataSchemaLocation") Optional<String> messageDataSchemaLocation,
-            @JsonProperty("columns") List<KafkaColumnHandle> columns,
-            @JsonProperty("constraint") TupleDomain<ColumnHandle> constraint)
+            @JsonProperty("columns") List<KafkaColumnHandle> columns)
     {
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -75,7 +71,6 @@ public final class KafkaTableHandle
         this.keyDataSchemaLocation = requireNonNull(keyDataSchemaLocation, "keyDataSchemaLocation is null");
         this.messageDataSchemaLocation = requireNonNull(messageDataSchemaLocation, "messageDataSchemaLocation is null");
         this.columns = requireNonNull(ImmutableList.copyOf(columns), "columns is null");
-        this.constraint = requireNonNull(constraint, "constraint is null");
     }
 
     @JsonProperty
@@ -126,12 +121,6 @@ public final class KafkaTableHandle
         return columns;
     }
 
-    @JsonProperty
-    public TupleDomain<ColumnHandle> getConstraint()
-    {
-        return constraint;
-    }
-
     public SchemaTableName toSchemaTableName()
     {
         return new SchemaTableName(schemaName, tableName);
@@ -140,7 +129,7 @@ public final class KafkaTableHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(schemaName, tableName, topicName, keyDataFormat, messageDataFormat, keyDataSchemaLocation, messageDataSchemaLocation, columns, constraint);
+        return Objects.hash(schemaName, tableName, topicName, keyDataFormat, messageDataFormat, keyDataSchemaLocation, messageDataSchemaLocation, columns);
     }
 
     @Override
@@ -161,8 +150,7 @@ public final class KafkaTableHandle
                 && Objects.equals(this.messageDataFormat, other.messageDataFormat)
                 && Objects.equals(this.keyDataSchemaLocation, other.keyDataSchemaLocation)
                 && Objects.equals(this.messageDataSchemaLocation, other.messageDataSchemaLocation)
-                && Objects.equals(this.columns, other.columns)
-                && Objects.equals(this.constraint, other.constraint);
+                && Objects.equals(this.columns, other.columns);
     }
 
     @Override
@@ -177,7 +165,6 @@ public final class KafkaTableHandle
                 .add("keyDataSchemaLocation", keyDataSchemaLocation)
                 .add("messageDataSchemaLocation", messageDataSchemaLocation)
                 .add("columns", columns)
-                .add("constraint", constraint)
                 .toString();
     }
 }

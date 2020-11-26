@@ -176,11 +176,6 @@ public class AllowAllAccessControl
     }
 
     @Override
-    public void checkCanSetTableAuthorization(SecurityContext context, QualifiedObjectName tableName, PrestoPrincipal principal)
-    {
-    }
-
-    @Override
     public void checkCanRenameColumn(SecurityContext context, QualifiedObjectName tableName)
     {
     }
@@ -217,16 +212,6 @@ public class AllowAllAccessControl
 
     @Override
     public void checkCanGrantExecuteFunctionPrivilege(SecurityContext context, String functionName, Identity grantee, boolean grantOption)
-    {
-    }
-
-    @Override
-    public void checkCanGrantSchemaPrivilege(SecurityContext context, Privilege privilege, CatalogSchemaName schemaName, PrestoPrincipal grantee, boolean grantOption)
-    {
-    }
-
-    @Override
-    public void checkCanRevokeSchemaPrivilege(SecurityContext context, Privilege privilege, CatalogSchemaName schemaName, PrestoPrincipal revokee, boolean grantOption)
     {
     }
 

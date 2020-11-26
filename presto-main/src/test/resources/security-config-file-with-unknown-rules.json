@@ -1,5 +1,5 @@
 {
-    "session_properties": [
+    "sessionProperties": [
         {
             "property": "force_local_scheduling",
             "allow": true

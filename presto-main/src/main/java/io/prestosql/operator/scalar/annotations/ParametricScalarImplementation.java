@@ -27,9 +27,8 @@ import io.prestosql.metadata.Signature;
 import io.prestosql.operator.ParametricImplementation;
 import io.prestosql.operator.annotations.FunctionsParserHelper;
 import io.prestosql.operator.annotations.ImplementationDependency;
-import io.prestosql.operator.scalar.ChoicesScalarFunctionImplementation;
-import io.prestosql.operator.scalar.ChoicesScalarFunctionImplementation.ScalarImplementationChoice;
 import io.prestosql.operator.scalar.ScalarFunctionImplementation;
+import io.prestosql.operator.scalar.ScalarFunctionImplementation.ScalarImplementationChoice;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.connector.ConnectorSession;
 import io.prestosql.spi.function.BlockIndex;
@@ -205,7 +204,7 @@ public class ParametricScalarImplementation
                     boundMethodHandle.asType(javaMethodType(choice, boundSignature)),
                     boundConstructor));
         }
-        return Optional.of(new ChoicesScalarFunctionImplementation(functionBinding, implementationChoices));
+        return Optional.of(new ScalarFunctionImplementation(implementationChoices));
     }
 
     @Override
@@ -241,7 +240,6 @@ public class ParametricScalarImplementation
         }
 
         List<InvocationArgumentConvention> argumentConventions = choice.getArgumentConventions();
-        int lambdaArgumentIndex = 0;
         for (int i = 0; i < argumentConventions.size(); i++) {
             InvocationArgumentConvention argumentConvention = argumentConventions.get(i);
             Type signatureType = signature.getArgumentTypes().get(i);
@@ -261,8 +259,7 @@ public class ParametricScalarImplementation
                     methodHandleParameterTypes.add(int.class);
                     break;
                 case FUNCTION:
-                    methodHandleParameterTypes.add(choice.getLambdaInterfaces().get(lambdaArgumentIndex));
-                    lambdaArgumentIndex++;
+                    methodHandleParameterTypes.add(choice.getLambdaInterfaces().get(i).orElseThrow(() -> new IllegalArgumentException("Argument is not a function")));
                     break;
                 default:
                     throw new UnsupportedOperationException("unknown argument convention: " + argumentConvention);
@@ -341,7 +338,7 @@ public class ParametricScalarImplementation
     {
         private final InvocationReturnConvention returnConvention;
         private final List<InvocationArgumentConvention> argumentConventions;
-        private final List<Class<?>> lambdaInterfaces;
+        private final List<Optional<Class<?>>> lambdaInterfaces;
         private final MethodHandle methodHandle;
         private final Optional<MethodHandle> constructor;
         private final List<ImplementationDependency> dependencies;
@@ -353,7 +350,7 @@ public class ParametricScalarImplementation
                 InvocationReturnConvention returnConvention,
                 boolean hasConnectorSession,
                 List<InvocationArgumentConvention> argumentConventions,
-                List<Class<?>> lambdaInterfaces,
+                List<Optional<Class<?>>> lambdaInterfaces,
                 MethodHandle methodHandle,
                 Optional<MethodHandle> constructor,
                 List<ImplementationDependency> dependencies,
@@ -400,7 +397,7 @@ public class ParametricScalarImplementation
             return argumentConventions;
         }
 
-        public List<Class<?>> getLambdaInterfaces()
+        public List<Optional<Class<?>>> getLambdaInterfaces()
         {
             return lambdaInterfaces;
         }
@@ -482,7 +479,7 @@ public class ParametricScalarImplementation
     {
         private final String functionName;
         private final List<InvocationArgumentConvention> argumentConventions = new ArrayList<>();
-        private final List<Class<?>> lambdaInterfaces = new ArrayList<>();
+        private final List<Optional<Class<?>>> lambdaInterfaces = new ArrayList<>();
         private final TypeSignature returnType;
         private final List<TypeSignature> argumentTypes = new ArrayList<>();
         private final List<Optional<Class<?>>> argumentNativeContainerTypes = new ArrayList<>();
@@ -576,7 +573,7 @@ public class ParametricScalarImplementation
 
                     // check if only declared typeParameters and literalParameters are used
                     validateImplementationDependencyAnnotation(method, implementationDependency.get(), typeParameterNames, literalParameters);
-                    dependencies.add(createDependency(implementationDependency.get(), literalParameters, parameterType));
+                    dependencies.add(createDependency(implementationDependency.get(), literalParameters));
 
                     parameterIndex++;
                 }
@@ -598,7 +595,7 @@ public class ParametricScalarImplementation
                         // function type
                         checkCondition(parameterType.isAnnotationPresent(FunctionalInterface.class), FUNCTION_IMPLEMENTATION_ERROR, "argument %s is marked as lambda but the function interface class is not annotated: %s", parameterIndex, methodHandle);
                         argumentConventions.add(FUNCTION);
-                        lambdaInterfaces.add(parameterType);
+                        lambdaInterfaces.add(Optional.of(parameterType));
                         argumentNativeContainerTypes.add(Optional.empty());
                         parameterIndex++;
                     }
@@ -655,6 +652,7 @@ public class ParametricScalarImplementation
                         }
 
                         argumentConventions.add(argumentConvention);
+                        lambdaInterfaces.add(Optional.empty());
                         parameterIndex++;
                         if (argumentConvention == NULL_FLAG || argumentConvention == BLOCK_POSITION) {
                             parameterIndex++;
@@ -697,7 +695,7 @@ public class ParametricScalarImplementation
                 if (annotation instanceof TypeParameter) {
                     checkTypeParameters(parseTypeSignature(((TypeParameter) annotation).value(), ImmutableSet.of()), typeParameterNames, method);
                 }
-                constructorDependencies.add(createDependency(annotation, literalParameters, constructor.getParameterTypes()[i]));
+                constructorDependencies.add(createDependency(annotation, literalParameters));
             }
             MethodHandle result = constructorMethodHandle(FUNCTION_IMPLEMENTATION_ERROR, constructor);
             // Change type of return value to Object to make sure callers won't have classloader issues

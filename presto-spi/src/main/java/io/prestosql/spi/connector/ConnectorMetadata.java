@@ -318,14 +318,6 @@ public interface ConnectorMetadata
     }
 
     /**
-     * Sets the user/role on the specified table.
-     */
-    default void setTableAuthorization(ConnectorSession session, SchemaTableName tableName, PrestoPrincipal principal)
-    {
-        throw new PrestoException(NOT_SUPPORTED, "This connector does not support setting an owner on a table");
-    }
-
-    /**
      * Rename the specified column
      */
     default void renameColumn(ConnectorSession session, ConnectorTableHandle tableHandle, ColumnHandle source, String target)
@@ -701,27 +693,11 @@ public interface ConnectorMetadata
     }
 
     /**
-     * Grants the specified privilege to the specified user on the specified schema
-     */
-    default void grantSchemaPrivileges(ConnectorSession session, String schemaName, Set<Privilege> privileges, PrestoPrincipal grantee, boolean grantOption)
-    {
-        throw new PrestoException(NOT_SUPPORTED, "This connector does not support grants on schemas");
-    }
-
-    /**
-     * Revokes the specified privilege on the specified schema from the specified user
-     */
-    default void revokeSchemaPrivileges(ConnectorSession session, String schemaName, Set<Privilege> privileges, PrestoPrincipal grantee, boolean grantOption)
-    {
-        throw new PrestoException(NOT_SUPPORTED, "This connector does not support revokes on schemas");
-    }
-
-    /**
      * Grants the specified privilege to the specified user on the specified table
      */
     default void grantTablePrivileges(ConnectorSession session, SchemaTableName tableName, Set<Privilege> privileges, PrestoPrincipal grantee, boolean grantOption)
     {
-        throw new PrestoException(NOT_SUPPORTED, "This connector does not support grants on tables");
+        throw new PrestoException(NOT_SUPPORTED, "This connector does not support grants");
     }
 
     /**
@@ -729,7 +705,7 @@ public interface ConnectorMetadata
      */
     default void revokeTablePrivileges(ConnectorSession session, SchemaTableName tableName, Set<Privilege> privileges, PrestoPrincipal grantee, boolean grantOption)
     {
-        throw new PrestoException(NOT_SUPPORTED, "This connector does not support revokes on tables");
+        throw new PrestoException(NOT_SUPPORTED, "This connector does not support revokes");
     }
 
     /**

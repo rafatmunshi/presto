@@ -116,7 +116,8 @@ public class TestHiveViews
         onHive().executeQuery("CREATE TABLE pageAds(pageid string, adid_list array<int>)");
         onHive().executeQuery("CREATE VIEW hive_lateral_view as SELECT pageid, adid FROM pageAds LATERAL VIEW explode(adid_list) adTable AS adid");
 
-        assertThat(query("SELECT COUNT(*) FROM hive_lateral_view")).contains(row(0));
+        assertThat(() -> query("SELECT COUNT(*) FROM hive_lateral_view"))
+                .failsWithMessage("Failed parsing stored view 'hive.default.hive_lateral_view': line 1:78: mismatched input 'VIEW'");
     }
 
     @Test(groups = HIVE_VIEWS)
@@ -151,7 +152,7 @@ public class TestHiveViews
                 row("hive", "test_schema", "presto_test_view", "VIEW"));
 
         assertThat(query("SELECT view_definition FROM information_schema.views WHERE table_schema = 'test_schema' and table_name = 'hive_test_view'")).containsOnly(
-                row("SELECT \"n_nationkey\", \"n_name\", \"n_regionkey\", \"n_comment\"\nFROM \"hive\".\"default\".\"nation\""));
+                row("SELECT \"nation\".\"n_nationkey\", \"nation\".\"n_name\", \"nation\".\"n_regionkey\", \"nation\".\"n_comment\" FROM \"default\".\"nation\""));
 
         assertThat(query("DESCRIBE test_schema.hive_test_view"))
                 .contains(row("n_nationkey", "bigint", "", ""));
@@ -173,19 +174,6 @@ public class TestHiveViews
         assertThat(query("SELECT data_type FROM information_schema.columns WHERE table_name = 'hive_view_parametrized'")).containsOnly(
                 row("decimal(20,4)"),
                 row("bigint"),
-                row("varchar"));
-    }
-
-    @Test(groups = HIVE_VIEWS)
-    public void testSimpleCoral()
-    {
-        onHive().executeQuery("DROP VIEW IF EXISTS hive_zero_index_view");
-        onHive().executeQuery("DROP TABLE IF EXISTS hive_table_dummy");
-
-        onHive().executeQuery("CREATE TABLE hive_table_dummy(a int)");
-        onHive().executeQuery("CREATE VIEW hive_zero_index_view AS SELECT array('presto','hive')[1] AS sql_dialect FROM hive_table_dummy");
-        onHive().executeQuery("INSERT INTO TABLE hive_table_dummy VALUES (1)");
-
-        assertThat(query("SELECT * FROM hive_zero_index_view")).containsOnly(row("hive"));
+                row("varchar(20)"));
     }
 }

@@ -13,6 +13,7 @@
  */
 package io.prestosql.spi.type;
 
+import io.prestosql.spi.block.MethodHandleUtil;
 import org.testng.annotations.Test;
 
 import static io.prestosql.spi.type.BigintType.BIGINT;
@@ -25,11 +26,27 @@ public class TestMapType
     @Test
     public void testMapDisplayName()
     {
-        TypeOperators typeOperators = new TypeOperators();
-        MapType mapType = new MapType(BIGINT, createVarcharType(42), typeOperators);
+        MapType mapType = new MapType(
+                BIGINT,
+                createVarcharType(42),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"));
         assertEquals(mapType.getDisplayName(), "map(bigint, varchar(42))");
 
-        mapType = new MapType(BIGINT, VARCHAR, typeOperators);
+        mapType = new MapType(
+                BIGINT,
+                VARCHAR,
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"),
+                MethodHandleUtil.methodHandle(TestMapType.class, "throwUnsupportedOperation"));
         assertEquals(mapType.getDisplayName(), "map(bigint, varchar)");
+    }
+
+    public static void throwUnsupportedOperation()
+    {
+        throw new UnsupportedOperationException();
     }
 }

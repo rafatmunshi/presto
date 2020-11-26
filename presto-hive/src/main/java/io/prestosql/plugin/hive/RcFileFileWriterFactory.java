@@ -14,7 +14,6 @@
 package io.prestosql.plugin.hive;
 
 import com.google.common.collect.ImmutableMap;
-import io.prestosql.plugin.hive.acid.AcidTransaction;
 import io.prestosql.plugin.hive.metastore.StorageFormat;
 import io.prestosql.plugin.hive.rcfile.HdfsRcFileDataSource;
 import io.prestosql.rcfile.RcFileDataSource;
@@ -39,7 +38,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 import java.util.function.Supplier;
@@ -48,7 +46,6 @@ import static io.prestosql.plugin.hive.HiveErrorCode.HIVE_WRITER_OPEN_ERROR;
 import static io.prestosql.plugin.hive.HiveErrorCode.HIVE_WRITE_VALIDATION_FAILED;
 import static io.prestosql.plugin.hive.HiveMetadata.PRESTO_QUERY_ID_NAME;
 import static io.prestosql.plugin.hive.HiveMetadata.PRESTO_VERSION_NAME;
-import static io.prestosql.plugin.hive.HiveSessionProperties.getTimestampPrecision;
 import static io.prestosql.plugin.hive.HiveSessionProperties.isRcfileOptimizedWriterValidate;
 import static io.prestosql.plugin.hive.rcfile.RcFilePageSourceFactory.createTextVectorEncoding;
 import static io.prestosql.plugin.hive.util.HiveUtil.getColumnNames;
@@ -97,10 +94,7 @@ public class RcFileFileWriterFactory
             StorageFormat storageFormat,
             Properties schema,
             JobConf configuration,
-            ConnectorSession session,
-            OptionalInt bucketNumber,
-            AcidTransaction transaction,
-            boolean useAcidSchema)
+            ConnectorSession session)
     {
         if (!RCFileOutputFormat.class.getName().equals(storageFormat.getOutputFormat())) {
             return Optional.empty();
@@ -123,7 +117,7 @@ public class RcFileFileWriterFactory
         // an index to rearrange columns in the proper order
         List<String> fileColumnNames = getColumnNames(schema);
         List<Type> fileColumnTypes = getColumnTypes(schema).stream()
-                .map(hiveType -> hiveType.getType(typeManager, getTimestampPrecision(session)))
+                .map(hiveType -> hiveType.getType(typeManager))
                 .collect(toList());
 
         int[] fileInputColumnIndexes = fileColumnNames.stream()

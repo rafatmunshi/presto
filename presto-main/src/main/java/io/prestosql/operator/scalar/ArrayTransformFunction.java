@@ -101,11 +101,10 @@ public final class ArrayTransformFunction
         Type inputType = functionBinding.getTypeVariable("T");
         Type outputType = functionBinding.getTypeVariable("U");
         Class<?> generatedClass = generateTransform(inputType, outputType);
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 FAIL_ON_NULL,
                 ImmutableList.of(NEVER_NULL, FUNCTION),
-                ImmutableList.of(UnaryFunctionInterface.class),
+                ImmutableList.of(Optional.empty(), Optional.of(UnaryFunctionInterface.class)),
                 methodHandle(generatedClass, "transform", PageBuilder.class, Block.class, UnaryFunctionInterface.class),
                 Optional.of(methodHandle(generatedClass, "createPageBuilder")));
     }

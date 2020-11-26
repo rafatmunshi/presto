@@ -17,7 +17,6 @@ import com.google.common.collect.ImmutableMap;
 import io.prestosql.Session;
 import io.prestosql.execution.resourcegroups.InternalResourceGroupManager;
 import io.prestosql.plugin.resourcegroups.ResourceGroupManagerPlugin;
-import io.prestosql.server.PrefixObjectNameGeneratorModule;
 import io.prestosql.spi.QueryId;
 import io.prestosql.testing.DistributedQueryRunner;
 import io.prestosql.tests.tpch.TpchQueryRunnerBuilder;
@@ -43,9 +42,7 @@ public class TestExecutionJmxMetrics
     public void testQueryStats()
             throws Exception
     {
-        try (DistributedQueryRunner queryRunner = TpchQueryRunnerBuilder.builder()
-                .setAdditionalModule(new PrefixObjectNameGeneratorModule("io.prestosql"))
-                .build()) {
+        try (DistributedQueryRunner queryRunner = TpchQueryRunnerBuilder.builder().build()) {
             queryRunner.installPlugin(new ResourceGroupManagerPlugin());
             InternalResourceGroupManager<?> resourceGroupManager = queryRunner.getCoordinator().getResourceGroupManager()
                     .orElseThrow(() -> new IllegalStateException("Resource manager not configured"));

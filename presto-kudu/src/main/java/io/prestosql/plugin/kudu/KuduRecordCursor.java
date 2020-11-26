@@ -208,15 +208,6 @@ public class KuduRecordCursor
     @Override
     public void close()
     {
-        if (!started) {
-            return;
-        }
-        try {
-            scanner.close();
-        }
-        catch (KuduException e) {
-            throw new RuntimeException(e);
-        }
         currentRow = null;
         nextRows = null;
     }

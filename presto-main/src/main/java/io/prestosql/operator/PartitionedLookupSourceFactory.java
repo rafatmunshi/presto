@@ -21,7 +21,6 @@ import io.prestosql.operator.LookupSourceProvider.LookupSourceLease;
 import io.prestosql.spi.Page;
 import io.prestosql.spi.PageBuilder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators;
 
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.Immutable;
@@ -62,7 +61,6 @@ public final class PartitionedLookupSourceFactory
     private final List<Type> hashChannelTypes;
     private final boolean outer;
     private final SpilledLookupSource spilledLookupSource;
-    private final BlockTypeOperators blockTypeOperators;
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -107,7 +105,7 @@ public final class PartitionedLookupSourceFactory
      */
     private final ConcurrentHashMap<SpillAwareLookupSourceProvider, LookupSource> suppliedLookupSources = new ConcurrentHashMap<>();
 
-    public PartitionedLookupSourceFactory(List<Type> types, List<Type> outputTypes, List<Type> hashChannelTypes, int partitionCount, boolean outer, BlockTypeOperators blockTypeOperators)
+    public PartitionedLookupSourceFactory(List<Type> types, List<Type> outputTypes, List<Type> hashChannelTypes, int partitionCount, boolean outer)
     {
         checkArgument(Integer.bitCount(partitionCount) == 1, "partitionCount must be a power of 2");
 
@@ -119,7 +117,6 @@ public final class PartitionedLookupSourceFactory
         this.partitions = (Supplier<LookupSource>[]) new Supplier<?>[partitionCount];
         this.outer = outer;
         spilledLookupSource = new SpilledLookupSource(outputTypes.size());
-        this.blockTypeOperators = blockTypeOperators;
     }
 
     @Override
@@ -240,7 +237,7 @@ public final class PartitionedLookupSourceFactory
                 verify(!completed, "lookupSourceSupplier already exist when completing");
                 verify(!outer, "It is not possible to reset lookupSourceSupplier which is tracking for outer join");
                 verify(partitions.length > 1, "Spill occurred when only one partition");
-                lookupSourceSupplier = createPartitionedLookupSourceSupplier(ImmutableList.copyOf(partitions), hashChannelTypes, outer, blockTypeOperators);
+                lookupSourceSupplier = createPartitionedLookupSourceSupplier(ImmutableList.copyOf(partitions), hashChannelTypes, outer);
                 closeCachedLookupSources();
             }
             else {
@@ -273,7 +270,7 @@ public final class PartitionedLookupSourceFactory
 
             if (partitionsSet != 1) {
                 List<Supplier<LookupSource>> partitions = ImmutableList.copyOf(this.partitions);
-                this.lookupSourceSupplier = createPartitionedLookupSourceSupplier(partitions, hashChannelTypes, outer, blockTypeOperators);
+                this.lookupSourceSupplier = createPartitionedLookupSourceSupplier(partitions, hashChannelTypes, outer);
             }
             else if (outer) {
                 this.lookupSourceSupplier = createOuterLookupSourceSupplier(partitions[0]);

@@ -81,8 +81,7 @@ public class ArraySubscriptOperator
         }
         methodHandle = methodHandle.bindTo(elementType);
         requireNonNull(methodHandle, "methodHandle is null");
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 NULLABLE_RETURN,
                 ImmutableList.of(NEVER_NULL, NEVER_NULL),
                 methodHandle);

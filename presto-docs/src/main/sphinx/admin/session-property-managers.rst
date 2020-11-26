@@ -60,7 +60,7 @@ Consider the following set of requirements:
   limit of 1 hour (tighter than the constraint on ``global``).
 
 * All ETL queries (tagged with 'etl') are routed to subgroups under the ``global.pipeline`` group, and must be
-  configured with certain properties to control writer behavior and a hive catalog property.
+  configured with certain properties to control writer behavior.
 
 These requirements can be expressed with the following rules:
 
@@ -69,23 +69,28 @@ These requirements can be expressed with the following rules:
     [
       {
         "group": "global.*",
-        "session_properties": {
+        "sessionProperties": {
           "query_max_execution_time": "8h",
         }
       },
       {
         "group": "global.interactive.*",
-        "session_properties": {
+        "sessionProperties": {
           "query_max_execution_time": "1h"
         }
       },
       {
         "group": "global.pipeline.*",
         "clientTags": ["etl"],
-        "session_properties": {
+        "sessionProperties": {
           "scale_writers": "true",
-          "writer_min_size": "1GB",
-          "hive.insert_existing_partitions_behavior": "overwrite"
+          "writer_min_size": "1GB"
         }
       }
     ]
+
+Limitations
+-----------
+
+The session property manager only supports system session properties and does
+not support catalog session properties.

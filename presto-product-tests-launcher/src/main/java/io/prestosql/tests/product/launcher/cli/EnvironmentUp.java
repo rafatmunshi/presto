@@ -26,6 +26,7 @@ import io.prestosql.tests.product.launcher.env.EnvironmentConfig;
 import io.prestosql.tests.product.launcher.env.EnvironmentFactory;
 import io.prestosql.tests.product.launcher.env.EnvironmentModule;
 import io.prestosql.tests.product.launcher.env.EnvironmentOptions;
+import io.prestosql.tests.product.launcher.env.common.Standard;
 import org.testcontainers.DockerClientFactory;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.ExitCode;
@@ -107,6 +108,7 @@ public final class EnvironmentUp
         private final boolean withoutPrestoMaster;
         private final boolean background;
         private final String environment;
+        private final boolean debug;
         private final EnvironmentConfig environmentConfig;
         private final Optional<Path> logsDirBase;
         private final DockerContainer.OutputMode outputMode;
@@ -119,6 +121,7 @@ public final class EnvironmentUp
             this.withoutPrestoMaster = options.withoutPrestoMaster;
             this.background = environmentUpOptions.background;
             this.environment = environmentUpOptions.environment;
+            this.debug = options.debug;
             this.outputMode = requireNonNull(options.output, "options.output is null");
             this.logsDirBase = requireNonNull(environmentUpOptions.logsDirBase, "environmentUpOptions.logsDirBase is null");
         }
@@ -137,6 +140,10 @@ public final class EnvironmentUp
             }
 
             log.info("Creating environment '%s' with configuration %s", environment, environmentConfig);
+            if (debug) {
+                builder.configureContainers(Standard::enablePrestoJavaDebugger);
+            }
+
             Environment environment = builder.build(getStandardListeners(environmentLogPath));
             environment.start();
 
@@ -151,7 +158,7 @@ public final class EnvironmentUp
             return ExitCode.OK;
         }
 
-        private static void killContainersReaperContainer()
+        private void killContainersReaperContainer()
         {
             try (DockerClient dockerClient = DockerClientFactory.lazyClient()) {
                 log.info("Killing the testcontainers reaper container (Ryuk) so that environment can stay alive");

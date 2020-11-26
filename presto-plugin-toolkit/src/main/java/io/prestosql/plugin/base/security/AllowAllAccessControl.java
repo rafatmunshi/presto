@@ -134,11 +134,6 @@ public class AllowAllAccessControl
     }
 
     @Override
-    public void checkCanSetTableAuthorization(ConnectorSecurityContext context, SchemaTableName tableName, PrestoPrincipal principal)
-    {
-    }
-
-    @Override
     public void checkCanSelectFromColumns(ConnectorSecurityContext context, SchemaTableName tableName, Set<String> columnNames)
     {
     }
@@ -175,16 +170,6 @@ public class AllowAllAccessControl
 
     @Override
     public void checkCanSetCatalogSessionProperty(ConnectorSecurityContext context, String propertyName)
-    {
-    }
-
-    @Override
-    public void checkCanGrantSchemaPrivilege(ConnectorSecurityContext context, Privilege privilege, String schemaName, PrestoPrincipal grantee, boolean grantOption)
-    {
-    }
-
-    @Override
-    public void checkCanRevokeSchemaPrivilege(ConnectorSecurityContext context, Privilege privilege, String schemaName, PrestoPrincipal revokee, boolean grantOption)
     {
     }
 

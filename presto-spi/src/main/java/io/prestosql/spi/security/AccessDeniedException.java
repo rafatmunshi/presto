@@ -26,11 +26,9 @@ import static java.lang.String.format;
 public class AccessDeniedException
         extends PrestoException
 {
-    public static final String PREFIX = "Access Denied: ";
-
     public AccessDeniedException(String message)
     {
-        super(PERMISSION_DENIED, PREFIX + message);
+        super(PERMISSION_DENIED, "Access Denied: " + message);
     }
 
     public static void denyImpersonateUser(String originalUser, String newUser)
@@ -258,11 +256,6 @@ public class AccessDeniedException
         throw new AccessDeniedException(format("Cannot drop a column from table %s%s", tableName, formatExtraInfo(extraInfo)));
     }
 
-    public static void denySetTableAuthorization(String tableName, PrestoPrincipal principal)
-    {
-        throw new AccessDeniedException(format("Cannot set authorization for table %s to %s", tableName, principal));
-    }
-
     public static void denyRenameColumn(String tableName)
     {
         denyRenameColumn(tableName, null);
@@ -366,26 +359,6 @@ public class AccessDeniedException
     public static void denySelectView(String viewName, String extraInfo)
     {
         throw new AccessDeniedException(format("Cannot select from view %s%s", viewName, formatExtraInfo(extraInfo)));
-    }
-
-    public static void denyGrantSchemaPrivilege(String privilege, String schemaName)
-    {
-        denyGrantSchemaPrivilege(privilege, schemaName, null);
-    }
-
-    public static void denyGrantSchemaPrivilege(String privilege, String schemaName, String extraInfo)
-    {
-        throw new AccessDeniedException(format("Cannot grant privilege %s on schema %s%s", privilege, schemaName, formatExtraInfo(extraInfo)));
-    }
-
-    public static void denyRevokeSchemaPrivilege(String privilege, String schemaName)
-    {
-        denyRevokeSchemaPrivilege(privilege, schemaName, null);
-    }
-
-    public static void denyRevokeSchemaPrivilege(String privilege, String schemaName, String extraInfo)
-    {
-        throw new AccessDeniedException(format("Cannot revoke privilege %s on schema %s%s", privilege, schemaName, formatExtraInfo(extraInfo)));
     }
 
     public static void denyGrantTablePrivilege(String privilege, String tableName)

@@ -42,11 +42,11 @@ import java.util.Map;
 import java.util.Optional;
 
 import static io.prestosql.plugin.iceberg.IcebergErrorCode.ICEBERG_INVALID_METADATA;
+import static io.prestosql.plugin.iceberg.IcebergErrorCode.ICEBERG_INVALID_SNAPSHOT_ID;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.BooleanType.BOOLEAN;
 import static io.prestosql.spi.type.IntegerType.INTEGER;
 import static io.prestosql.spi.type.VarcharType.VARCHAR;
-import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 public class ManifestsTable
@@ -93,21 +93,21 @@ public class ManifestsTable
     @Override
     public ConnectorPageSource pageSource(ConnectorTransactionHandle transactionHandle, ConnectorSession session, TupleDomain<Integer> constraint)
     {
-        if (snapshotId.isEmpty()) {
-            return new FixedPageSource(ImmutableList.of());
-        }
-        return new FixedPageSource(buildPages(tableMetadata, icebergTable, snapshotId.get()));
+        return new FixedPageSource(buildPages(tableMetadata, icebergTable, snapshotId));
     }
 
-    private static List<Page> buildPages(ConnectorTableMetadata tableMetadata, Table icebergTable, long snapshotId)
+    private static List<Page> buildPages(ConnectorTableMetadata tableMetadata, Table icebergTable, Optional<Long> snapshotId)
     {
         PageListBuilder pagesBuilder = PageListBuilder.forTable(tableMetadata);
 
-        Snapshot snapshot = icebergTable.snapshot(snapshotId);
+        Snapshot snapshot = snapshotId.map(icebergTable::snapshot)
+                .orElseGet(icebergTable::currentSnapshot);
         if (snapshot == null) {
-            throw new PrestoException(ICEBERG_INVALID_METADATA, format("Snapshot ID [%s] does not exist for table: %s", snapshotId, icebergTable));
+            if (snapshotId.isPresent()) {
+                throw new PrestoException(ICEBERG_INVALID_SNAPSHOT_ID, "Invalid snapshot ID: " + snapshotId.get());
+            }
+            throw new PrestoException(ICEBERG_INVALID_METADATA, "There's no snapshot associated with table " + tableMetadata.getTable().toString());
         }
-
         Map<Integer, PartitionSpec> partitionSpecsById = icebergTable.specs();
 
         snapshot.allManifests().forEach(file -> {

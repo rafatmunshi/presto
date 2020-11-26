@@ -80,7 +80,6 @@ import static java.lang.Math.min;
 import static java.lang.String.format;
 import static java.util.Locale.ENGLISH;
 import static java.util.Objects.requireNonNull;
-import static org.apache.hadoop.hive.ql.io.AcidUtils.isTransactionalTable;
 
 public class HiveSplitManager
         implements ConnectorSplitManager
@@ -217,11 +216,8 @@ public class HiveSplitManager
 
         Iterable<HivePartitionMetadata> hivePartitions = getPartitionMetadata(session, metastore, table, tableName, partitions, bucketHandle.map(HiveBucketHandle::toTableBucketProperty));
 
-        // Only one thread per partition is usable when a table is not transactional
-        int concurrency = isTransactionalTable(table.getParameters()) ? splitLoaderConcurrency : min(splitLoaderConcurrency, partitions.size());
         HiveSplitLoader hiveSplitLoader = new BackgroundHiveSplitLoader(
                 table,
-                hiveTable.getTransaction(),
                 hivePartitions,
                 hiveTable.getCompactEffectivePredicate(),
                 dynamicFilter,
@@ -233,7 +229,7 @@ public class HiveSplitManager
                 namenodeStats,
                 directoryLister,
                 executor,
-                concurrency,
+                splitLoaderConcurrency,
                 recursiveDfsWalkerEnabled,
                 !hiveTable.getPartitionColumns().isEmpty() && isIgnoreAbsentPartitions(session),
                 metastore.getValidWriteIds(session, hiveTable)

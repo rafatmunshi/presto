@@ -25,7 +25,6 @@ import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.type.Type;
 import io.prestosql.sql.gen.JoinCompiler;
 import io.prestosql.sql.planner.plan.PlanNodeId;
-import io.prestosql.type.BlockTypeOperators;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,7 +55,6 @@ public class RowNumberOperator
         private final int expectedPositions;
         private boolean closed;
         private final JoinCompiler joinCompiler;
-        private final BlockTypeOperators blockTypeOperators;
 
         public RowNumberOperatorFactory(
                 int operatorId,
@@ -68,8 +66,7 @@ public class RowNumberOperator
                 Optional<Integer> maxRowsPerPartition,
                 Optional<Integer> hashChannel,
                 int expectedPositions,
-                JoinCompiler joinCompiler,
-                BlockTypeOperators blockTypeOperators)
+                JoinCompiler joinCompiler)
         {
             this.operatorId = operatorId;
             this.planNodeId = requireNonNull(planNodeId, "planNodeId is null");
@@ -83,7 +80,6 @@ public class RowNumberOperator
             checkArgument(expectedPositions > 0, "expectedPositions < 0");
             this.expectedPositions = expectedPositions;
             this.joinCompiler = requireNonNull(joinCompiler, "joinCompiler is null");
-            this.blockTypeOperators = requireNonNull(blockTypeOperators, "blockTypeOperators is null");
         }
 
         @Override
@@ -101,8 +97,7 @@ public class RowNumberOperator
                     maxRowsPerPartition,
                     hashChannel,
                     expectedPositions,
-                    joinCompiler,
-                    blockTypeOperators);
+                    joinCompiler);
         }
 
         @Override
@@ -114,7 +109,7 @@ public class RowNumberOperator
         @Override
         public OperatorFactory duplicate()
         {
-            return new RowNumberOperatorFactory(operatorId, planNodeId, sourceTypes, outputChannels, partitionChannels, partitionTypes, maxRowsPerPartition, hashChannel, expectedPositions, joinCompiler, blockTypeOperators);
+            return new RowNumberOperatorFactory(operatorId, planNodeId, sourceTypes, outputChannels, partitionChannels, partitionTypes, maxRowsPerPartition, hashChannel, expectedPositions, joinCompiler);
         }
     }
 
@@ -147,8 +142,7 @@ public class RowNumberOperator
             Optional<Integer> maxRowsPerPartition,
             Optional<Integer> hashChannel,
             int expectedPositions,
-            JoinCompiler joinCompiler,
-            BlockTypeOperators blockTypeOperators)
+            JoinCompiler joinCompiler)
     {
         this.operatorContext = requireNonNull(operatorContext, "operatorContext is null");
         this.localUserMemoryContext = operatorContext.localUserMemoryContext();
@@ -169,7 +163,7 @@ public class RowNumberOperator
         }
         else {
             int[] channels = Ints.toArray(partitionChannels);
-            this.groupByHash = Optional.of(createGroupByHash(partitionTypes, channels, hashChannel, expectedPositions, isDictionaryAggregationEnabled(operatorContext.getSession()), joinCompiler, blockTypeOperators, this::updateMemoryReservation));
+            this.groupByHash = Optional.of(createGroupByHash(partitionTypes, channels, hashChannel, expectedPositions, isDictionaryAggregationEnabled(operatorContext.getSession()), joinCompiler, this::updateMemoryReservation));
         }
     }
 

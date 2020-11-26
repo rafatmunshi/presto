@@ -27,6 +27,5 @@ public class TestBigQueryPlugin
         BigQueryPlugin plugin = new BigQueryPlugin();
         ConnectorFactory factory = getOnlyElement(plugin.getConnectorFactories());
         assertInstanceOf(factory, BigQueryConnectorFactory.class);
-        // TODO test the factory
     }
 }

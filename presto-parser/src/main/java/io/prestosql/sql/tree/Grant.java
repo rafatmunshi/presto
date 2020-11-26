@@ -26,28 +26,28 @@ public class Grant
         extends Statement
 {
     private final Optional<List<String>> privileges; // missing means ALL PRIVILEGES
-    private final Optional<GrantOnType> type;
-    private final QualifiedName name;
+    private final boolean table;
+    private final QualifiedName tableName;
     private final PrincipalSpecification grantee;
     private final boolean grantOption;
 
-    public Grant(Optional<List<String>> privileges, Optional<GrantOnType> type, QualifiedName name, PrincipalSpecification grantee, boolean grantOption)
+    public Grant(Optional<List<String>> privileges, boolean table, QualifiedName tableName, PrincipalSpecification grantee, boolean grantOption)
     {
-        this(Optional.empty(), privileges, type, name, grantee, grantOption);
+        this(Optional.empty(), privileges, table, tableName, grantee, grantOption);
     }
 
-    public Grant(NodeLocation location, Optional<List<String>> privileges, Optional<GrantOnType> type, QualifiedName name, PrincipalSpecification grantee, boolean grantOption)
+    public Grant(NodeLocation location, Optional<List<String>> privileges, boolean table, QualifiedName tableName, PrincipalSpecification grantee, boolean grantOption)
     {
-        this(Optional.of(location), privileges, type, name, grantee, grantOption);
+        this(Optional.of(location), privileges, table, tableName, grantee, grantOption);
     }
 
-    private Grant(Optional<NodeLocation> location, Optional<List<String>> privileges, Optional<GrantOnType> type, QualifiedName name, PrincipalSpecification grantee, boolean grantOption)
+    private Grant(Optional<NodeLocation> location, Optional<List<String>> privileges, boolean table, QualifiedName tableName, PrincipalSpecification grantee, boolean grantOption)
     {
         super(location);
         requireNonNull(privileges, "privileges is null");
         this.privileges = privileges.map(ImmutableList::copyOf);
-        this.type = requireNonNull(type, "type is null");
-        this.name = requireNonNull(name, "name is null");
+        this.table = table;
+        this.tableName = requireNonNull(tableName, "tableName is null");
         this.grantee = requireNonNull(grantee, "grantee is null");
         this.grantOption = grantOption;
     }
@@ -57,14 +57,14 @@ public class Grant
         return privileges;
     }
 
-    public Optional<GrantOnType> getType()
+    public boolean isTable()
     {
-        return type;
+        return table;
     }
 
-    public QualifiedName getName()
+    public QualifiedName getTableName()
     {
-        return name;
+        return tableName;
     }
 
     public PrincipalSpecification getGrantee()
@@ -92,7 +92,7 @@ public class Grant
     @Override
     public int hashCode()
     {
-        return Objects.hash(privileges, type, name, grantee, grantOption);
+        return Objects.hash(privileges, table, tableName, grantee, grantOption);
     }
 
     @Override
@@ -106,8 +106,8 @@ public class Grant
         }
         Grant o = (Grant) obj;
         return Objects.equals(privileges, o.privileges) &&
-                Objects.equals(type, o.type) &&
-                Objects.equals(name, o.name) &&
+                Objects.equals(table, o.table) &&
+                Objects.equals(tableName, o.tableName) &&
                 Objects.equals(grantee, o.grantee) &&
                 Objects.equals(grantOption, o.grantOption);
     }
@@ -117,8 +117,8 @@ public class Grant
     {
         return toStringHelper(this)
                 .add("privileges", privileges)
-                .add("type", type)
-                .add("name", name)
+                .add("table", table)
+                .add("tableName", tableName)
                 .add("grantee", grantee)
                 .add("grantOption", grantOption)
                 .toString();

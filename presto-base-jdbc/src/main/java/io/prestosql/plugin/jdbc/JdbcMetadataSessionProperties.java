@@ -26,7 +26,7 @@ import static io.prestosql.spi.session.PropertyMetadata.booleanProperty;
 public class JdbcMetadataSessionProperties
         implements SessionPropertiesProvider
 {
-    public static final String AGGREGATION_PUSHDOWN_ENABLED = "aggregation_pushdown_enabled";
+    public static final String ALLOW_AGGREGATION_PUSHDOWN = "allow_aggregation_pushdown";
 
     private final List<PropertyMetadata<?>> properties;
 
@@ -35,9 +35,9 @@ public class JdbcMetadataSessionProperties
     {
         properties = ImmutableList.<PropertyMetadata<?>>builder()
                 .add(booleanProperty(
-                        AGGREGATION_PUSHDOWN_ENABLED,
-                        "Enable aggregation pushdown",
-                        jdbcMetadataConfig.isAggregationPushdownEnabled(),
+                        ALLOW_AGGREGATION_PUSHDOWN,
+                        "Allow aggregation pushdown",
+                        jdbcMetadataConfig.isAllowAggregationPushdown(),
                         false))
                 .build();
     }
@@ -48,8 +48,8 @@ public class JdbcMetadataSessionProperties
         return properties;
     }
 
-    public static boolean isAggregationPushdownEnabled(ConnectorSession session)
+    public static boolean isAllowAggregationPushdown(ConnectorSession session)
     {
-        return session.getProperty(AGGREGATION_PUSHDOWN_ENABLED, Boolean.class);
+        return session.getProperty(ALLOW_AGGREGATION_PUSHDOWN, Boolean.class);
     }
 }

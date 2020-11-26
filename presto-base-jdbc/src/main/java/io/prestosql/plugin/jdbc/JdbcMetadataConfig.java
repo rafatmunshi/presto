@@ -15,12 +15,11 @@ package io.prestosql.plugin.jdbc;
 
 import io.airlift.configuration.Config;
 import io.airlift.configuration.ConfigDescription;
-import io.airlift.configuration.LegacyConfig;
 
 public class JdbcMetadataConfig
 {
     private boolean allowDropTable;
-    private boolean aggregationPushdownEnabled = true;
+    private boolean allowAggregationPushdown = true;
 
     public boolean isAllowDropTable()
     {
@@ -35,17 +34,16 @@ public class JdbcMetadataConfig
         return this;
     }
 
-    public boolean isAggregationPushdownEnabled()
+    public boolean isAllowAggregationPushdown()
     {
-        return aggregationPushdownEnabled;
+        return allowAggregationPushdown;
     }
 
-    @Config("aggregation-pushdown.enabled")
-    @LegacyConfig("allow-aggregation-pushdown")
-    @ConfigDescription("Enable aggregation pushdown")
-    public JdbcMetadataConfig setAggregationPushdownEnabled(boolean aggregationPushdownEnabled)
+    @Config("allow-aggregation-pushdown")
+    @ConfigDescription("Allow aggregation pushdown")
+    public JdbcMetadataConfig setAllowAggregationPushdown(boolean allowAggregationPushdown)
     {
-        this.aggregationPushdownEnabled = aggregationPushdownEnabled;
+        this.allowAggregationPushdown = allowAggregationPushdown;
         return this;
     }
 }

@@ -16,7 +16,6 @@ package io.prestosql.plugin.hive;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.ImmutableList;
-import io.prestosql.plugin.hive.acid.AcidTransaction;
 import io.prestosql.plugin.hive.metastore.HivePageSinkMetadata;
 import io.prestosql.spi.connector.SchemaTableName;
 
@@ -35,7 +34,7 @@ public class HiveWritableTableHandle
     private final Optional<HiveBucketProperty> bucketProperty;
     private final HiveStorageFormat tableStorageFormat;
     private final HiveStorageFormat partitionStorageFormat;
-    private final AcidTransaction transaction;
+    private final boolean transactional;
 
     public HiveWritableTableHandle(
             String schemaName,
@@ -46,7 +45,7 @@ public class HiveWritableTableHandle
             Optional<HiveBucketProperty> bucketProperty,
             HiveStorageFormat tableStorageFormat,
             HiveStorageFormat partitionStorageFormat,
-            AcidTransaction transaction)
+            boolean transactional)
     {
         this.schemaName = requireNonNull(schemaName, "schemaName is null");
         this.tableName = requireNonNull(tableName, "tableName is null");
@@ -56,7 +55,7 @@ public class HiveWritableTableHandle
         this.bucketProperty = requireNonNull(bucketProperty, "bucketProperty is null");
         this.tableStorageFormat = requireNonNull(tableStorageFormat, "tableStorageFormat is null");
         this.partitionStorageFormat = requireNonNull(partitionStorageFormat, "partitionStorageFormat is null");
-        this.transaction = requireNonNull(transaction);
+        this.transactional = transactional;
     }
 
     @JsonProperty
@@ -114,15 +113,9 @@ public class HiveWritableTableHandle
     }
 
     @JsonProperty
-    public AcidTransaction getTransaction()
-    {
-        return transaction;
-    }
-
-    @JsonIgnore
     public boolean isTransactional()
     {
-        return transaction.isTransactional();
+        return transactional;
     }
 
     @Override

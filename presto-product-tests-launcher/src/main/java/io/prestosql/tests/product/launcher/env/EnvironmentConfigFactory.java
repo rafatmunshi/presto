@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static io.prestosql.tests.product.launcher.env.Environments.canonicalName;
 
 public class EnvironmentConfigFactory
 {
@@ -35,7 +34,6 @@ public class EnvironmentConfigFactory
 
     public EnvironmentConfig getConfig(String configName)
     {
-        configName = canonicalName(configName);
         checkArgument(configurations.containsKey(configName), "No environment config with name '%s'. Those do exist, however: %s", configName, listConfigs());
         return configurations.get(configName);
     }

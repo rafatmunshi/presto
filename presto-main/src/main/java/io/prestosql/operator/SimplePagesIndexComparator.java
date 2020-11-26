@@ -14,42 +14,28 @@
 package io.prestosql.operator;
 
 import com.google.common.collect.ImmutableList;
-import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.block.Block;
-import io.prestosql.spi.connector.SortOrder;
+import io.prestosql.spi.block.SortOrder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 
-import java.lang.invoke.MethodHandle;
 import java.util.List;
 
-import static com.google.common.base.Throwables.throwIfUnchecked;
 import static io.prestosql.operator.SyntheticAddress.decodePosition;
 import static io.prestosql.operator.SyntheticAddress.decodeSliceIndex;
-import static io.prestosql.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
-import static io.prestosql.spi.function.InvocationConvention.InvocationArgumentConvention.BLOCK_POSITION;
-import static io.prestosql.spi.function.InvocationConvention.InvocationReturnConvention.FAIL_ON_NULL;
-import static io.prestosql.spi.function.InvocationConvention.simpleConvention;
 import static java.util.Objects.requireNonNull;
 
 public class SimplePagesIndexComparator
         implements PagesIndexComparator
 {
     private final List<Integer> sortChannels;
-    private final List<MethodHandle> orderingOperators;
+    private final List<SortOrder> sortOrders;
+    private final List<Type> sortTypes;
 
-    public SimplePagesIndexComparator(List<Type> sortTypes, List<Integer> sortChannels, List<SortOrder> sortOrders, TypeOperators typeOperators)
+    public SimplePagesIndexComparator(List<Type> sortTypes, List<Integer> sortChannels, List<SortOrder> sortOrders)
     {
+        this.sortTypes = ImmutableList.copyOf(requireNonNull(sortTypes, "sortTypes is null"));
         this.sortChannels = ImmutableList.copyOf(requireNonNull(sortChannels, "sortChannels is null"));
-        requireNonNull(sortTypes, "sortTypes is null");
-        requireNonNull(sortOrders, "sortOrders is null");
-        ImmutableList.Builder<MethodHandle> orderingOperators = ImmutableList.builder();
-        for (int index = 0; index < sortTypes.size(); index++) {
-            Type type = sortTypes.get(index);
-            SortOrder sortOrder = sortOrders.get(index);
-            orderingOperators.add(typeOperators.getOrderingOperator(type, sortOrder, simpleConvention(FAIL_ON_NULL, BLOCK_POSITION, BLOCK_POSITION)));
-        }
-        this.orderingOperators = orderingOperators.build();
+        this.sortOrders = ImmutableList.copyOf(requireNonNull(sortOrders, "sortOrders is null"));
     }
 
     @Override
@@ -63,23 +49,17 @@ public class SimplePagesIndexComparator
         int rightBlockIndex = decodeSliceIndex(rightPageAddress);
         int rightBlockPosition = decodePosition(rightPageAddress);
 
-        try {
-            for (int i = 0; i < sortChannels.size(); i++) {
-                int sortChannel = sortChannels.get(i);
-                Block leftBlock = pagesIndex.getChannel(sortChannel).get(leftBlockIndex);
-                Block rightBlock = pagesIndex.getChannel(sortChannel).get(rightBlockIndex);
+        for (int i = 0; i < sortChannels.size(); i++) {
+            int sortChannel = sortChannels.get(i);
+            Block leftBlock = pagesIndex.getChannel(sortChannel).get(leftBlockIndex);
+            Block rightBlock = pagesIndex.getChannel(sortChannel).get(rightBlockIndex);
 
-                MethodHandle orderingOperator = orderingOperators.get(i);
-                int compare = (int) orderingOperator.invokeExact(leftBlock, leftBlockPosition, rightBlock, rightBlockPosition);
-                if (compare != 0) {
-                    return compare;
-                }
+            SortOrder sortOrder = sortOrders.get(i);
+            int compare = sortOrder.compareBlockValue(sortTypes.get(i), leftBlock, leftBlockPosition, rightBlock, rightBlockPosition);
+            if (compare != 0) {
+                return compare;
             }
-            return 0;
         }
-        catch (Throwable throwable) {
-            throwIfUnchecked(throwable);
-            throw new PrestoException(GENERIC_INTERNAL_ERROR, throwable);
-        }
+        return 0;
     }
 }

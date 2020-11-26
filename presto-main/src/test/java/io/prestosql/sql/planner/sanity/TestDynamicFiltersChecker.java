@@ -22,7 +22,6 @@ import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.TableHandle;
 import io.prestosql.plugin.tpch.TpchColumnHandle;
 import io.prestosql.plugin.tpch.TpchTableHandle;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.parser.SqlParser;
 import io.prestosql.sql.planner.PlanNodeIdAllocator;
 import io.prestosql.sql.planner.Symbol;
@@ -51,7 +50,6 @@ public class TestDynamicFiltersChecker
         extends BasePlanTest
 {
     private Metadata metadata;
-    private TypeOperators typeOperators = new TypeOperators();
     private PlanBuilder builder;
     private Symbol lineitemOrderKeySymbol;
     private TableScanNode lineitemTableScanNode;
@@ -144,7 +142,7 @@ public class TestDynamicFiltersChecker
         validatePlan(root);
     }
 
-    @Test(expectedExceptions = VerifyException.class, expectedExceptionsMessageRegExp = "Dynamic filters \\[Descriptor\\{id=DF, input=\"ORDERS_OK\", operator=EQUAL\\}\\] present in filter predicate whose source is not a table scan.")
+    @Test(expectedExceptions = VerifyException.class, expectedExceptionsMessageRegExp = "Dynamic filters \\[Descriptor\\{id=DF, input=\"ORDERS_OK\"\\}\\] present in filter predicate whose source is not a table scan.")
     public void testDynamicFilterNotAboveTableScan()
     {
         PlanNode root = builder.output(
@@ -197,46 +195,6 @@ public class TestDynamicFiltersChecker
                         Optional.empty(),
                         Optional.empty(),
                         ImmutableMap.of()));
-        validatePlan(root);
-    }
-
-    @Test(expectedExceptions = VerifyException.class, expectedExceptionsMessageRegExp = "Dynamic filter expression \\(\"LINEITEM_OK\" \\+ BIGINT '1'\\) must be a SymbolReference or a CAST of SymbolReference.")
-    public void testUnsupportedDynamicFilterExpression()
-    {
-        PlanNode root = builder.output(ImmutableList.of(), ImmutableList.of(),
-                builder.join(
-                        INNER,
-                        builder.filter(
-                                createDynamicFilterExpression(metadata, new DynamicFilterId("DF"), BIGINT, expression("LINEITEM_OK + BIGINT'1'")),
-                                lineitemTableScanNode),
-                        ordersTableScanNode,
-                        ImmutableList.of(new JoinNode.EquiJoinClause(lineitemOrderKeySymbol, ordersOrderKeySymbol)),
-                        ImmutableList.of(lineitemOrderKeySymbol),
-                        ImmutableList.of(ordersOrderKeySymbol),
-                        Optional.empty(),
-                        Optional.empty(),
-                        Optional.empty(),
-                        ImmutableMap.of(new DynamicFilterId("DF"), ordersOrderKeySymbol)));
-        validatePlan(root);
-    }
-
-    @Test(expectedExceptions = VerifyException.class, expectedExceptionsMessageRegExp = "The expression CAST\\(\"LINEITEM_OK\" AS INT\\) within in a CAST in dynamic filter must be a SymbolReference.")
-    public void testUnsupportedCastExpression()
-    {
-        PlanNode root = builder.output(ImmutableList.of(), ImmutableList.of(),
-                builder.join(
-                        INNER,
-                        builder.filter(
-                                createDynamicFilterExpression(metadata, new DynamicFilterId("DF"), BIGINT, expression("CAST(CAST(LINEITEM_OK AS INT) AS BIGINT)")),
-                                lineitemTableScanNode),
-                        ordersTableScanNode,
-                        ImmutableList.of(new JoinNode.EquiJoinClause(lineitemOrderKeySymbol, ordersOrderKeySymbol)),
-                        ImmutableList.of(lineitemOrderKeySymbol),
-                        ImmutableList.of(ordersOrderKeySymbol),
-                        Optional.empty(),
-                        Optional.empty(),
-                        Optional.empty(),
-                        ImmutableMap.of(new DynamicFilterId("DF"), ordersOrderKeySymbol)));
         validatePlan(root);
     }
 
@@ -306,7 +264,7 @@ public class TestDynamicFiltersChecker
         validatePlan(root);
     }
 
-    @Test(expectedExceptions = VerifyException.class, expectedExceptionsMessageRegExp = "Dynamic filters \\[Descriptor\\{id=DF, input=\"ORDERS_OK\", operator=EQUAL\\}\\] present in filter predicate whose source is not a table scan.")
+    @Test(expectedExceptions = VerifyException.class, expectedExceptionsMessageRegExp = "Dynamic filters \\[Descriptor\\{id=DF, input=\"ORDERS_OK\"\\}\\] present in filter predicate whose source is not a table scan.")
     public void testDynamicFilterNotAboveTableScanWithSemiJoin()
     {
         PlanNode root = builder.semiJoin(
@@ -332,7 +290,7 @@ public class TestDynamicFiltersChecker
         getQueryRunner().inTransaction(session -> {
             // metadata.getCatalogHandle() registers the catalog for the transaction
             session.getCatalog().ifPresent(catalog -> metadata.getCatalogHandle(session, catalog));
-            new DynamicFiltersChecker().validate(root, session, metadata, typeOperators, new TypeAnalyzer(new SqlParser(), metadata), TypeProvider.empty(), WarningCollector.NOOP);
+            new DynamicFiltersChecker().validate(root, session, metadata, new TypeAnalyzer(new SqlParser(), metadata), TypeProvider.empty(), WarningCollector.NOOP);
             return null;
         });
     }

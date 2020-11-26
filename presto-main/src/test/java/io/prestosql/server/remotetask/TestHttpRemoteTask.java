@@ -31,7 +31,6 @@ import io.airlift.units.Duration;
 import io.prestosql.block.BlockJsonSerde;
 import io.prestosql.client.NodeVersion;
 import io.prestosql.connector.CatalogName;
-import io.prestosql.execution.DynamicFilterConfig;
 import io.prestosql.execution.DynamicFiltersCollector.VersionedDynamicFilterDomains;
 import io.prestosql.execution.Lifespan;
 import io.prestosql.execution.NodeTaskMap;
@@ -65,10 +64,8 @@ import io.prestosql.spi.connector.TestingColumnHandle;
 import io.prestosql.spi.predicate.Domain;
 import io.prestosql.spi.predicate.TupleDomain;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.DynamicFilters;
 import io.prestosql.sql.planner.Symbol;
-import io.prestosql.sql.planner.SymbolAllocator;
 import io.prestosql.sql.planner.plan.DynamicFilterId;
 import io.prestosql.sql.planner.plan.PlanNodeId;
 import io.prestosql.sql.tree.SymbolReference;
@@ -97,7 +94,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -200,17 +196,14 @@ public class TestHttpRemoteTask
     {
         DynamicFilterId filterId1 = new DynamicFilterId("df1");
         DynamicFilterId filterId2 = new DynamicFilterId("df2");
-        SymbolAllocator symbolAllocator = new SymbolAllocator();
-        Symbol symbol1 = symbolAllocator.newSymbol("DF_SYMBOL1", BIGINT);
-        Symbol symbol2 = symbolAllocator.newSymbol("DF_SYMBOL2", BIGINT);
-        SymbolReference df1 = symbol1.toSymbolReference();
-        SymbolReference df2 = symbol2.toSymbolReference();
+        SymbolReference df1 = new SymbolReference("DF_SYMBOL1");
+        SymbolReference df2 = new SymbolReference("DF_SYMBOL2");
         ColumnHandle handle1 = new TestingColumnHandle("column1");
         ColumnHandle handle2 = new TestingColumnHandle("column2");
         QueryId queryId = new QueryId("test");
 
         TestingTaskResource testingTaskResource = new TestingTaskResource(new AtomicLong(System.nanoTime()), FailureScenario.NO_FAILURE);
-        DynamicFilterService dynamicFilterService = new DynamicFilterService(createTestMetadataManager(), new TypeOperators(), newDirectExecutorService());
+        DynamicFilterService dynamicFilterService = new DynamicFilterService(newDirectExecutorService());
         HttpRemoteTaskFactory httpRemoteTaskFactory = createHttpRemoteTaskFactory(testingTaskResource, dynamicFilterService);
         RemoteTask remoteTask = createRemoteTask(httpRemoteTaskFactory);
 
@@ -221,11 +214,12 @@ public class TestHttpRemoteTask
         testingTaskResource.setDynamicFilterDomains(new VersionedDynamicFilterDomains(1L, initialDomain));
         dynamicFilterService.registerQuery(
                 queryId,
-                TEST_SESSION,
                 ImmutableSet.of(filterId1, filterId2),
                 ImmutableSet.of(filterId1, filterId2),
                 ImmutableSet.of());
         dynamicFilterService.stageCannotScheduleMoreTasks(new StageId(queryId, 1), 1);
+
+        remoteTask.start();
 
         DynamicFilter dynamicFilter = dynamicFilterService.createDynamicFilter(
                 queryId,
@@ -233,15 +227,11 @@ public class TestHttpRemoteTask
                         new DynamicFilters.Descriptor(filterId1, df1),
                         new DynamicFilters.Descriptor(filterId2, df2)),
                 ImmutableMap.of(
-                        symbol1, handle1,
-                        symbol2, handle2),
-                symbolAllocator.getTypes());
+                        Symbol.from(df1), handle1,
+                        Symbol.from(df2), handle2));
 
         // make sure initial dynamic filters are collected
-        CompletableFuture<?> future = dynamicFilter.isBlocked();
-        remoteTask.start();
-        future.get();
-
+        dynamicFilter.isBlocked().get();
         assertEquals(
                 dynamicFilter.getCurrentPredicate(),
                 TupleDomain.withColumnDomains(ImmutableMap.of(
@@ -250,13 +240,12 @@ public class TestHttpRemoteTask
 
         // make sure dynamic filters are not collected for every status update
         assertEventually(
-                new Duration(15, SECONDS),
+                new Duration(5, SECONDS),
                 () -> assertGreaterThanOrEqual(testingTaskResource.getStatusFetchCounter(), 3L));
-        future = dynamicFilter.isBlocked();
         testingTaskResource.setDynamicFilterDomains(new VersionedDynamicFilterDomains(
                 2L,
                 ImmutableMap.of(filterId2, Domain.singleValue(BIGINT, 2L))));
-        future.get();
+        dynamicFilter.isBlocked().get();
         assertEquals(
                 dynamicFilter.getCurrentPredicate(),
                 TupleDomain.withColumnDomains(ImmutableMap.of(
@@ -318,7 +307,7 @@ public class TestHttpRemoteTask
 
     private static HttpRemoteTaskFactory createHttpRemoteTaskFactory(TestingTaskResource testingTaskResource)
     {
-        return createHttpRemoteTaskFactory(testingTaskResource, new DynamicFilterService(createTestMetadataManager(), new TypeOperators(), new DynamicFilterConfig()));
+        return createHttpRemoteTaskFactory(testingTaskResource, new DynamicFilterService());
     }
 
     private static HttpRemoteTaskFactory createHttpRemoteTaskFactory(TestingTaskResource testingTaskResource, DynamicFilterService dynamicFilterService)

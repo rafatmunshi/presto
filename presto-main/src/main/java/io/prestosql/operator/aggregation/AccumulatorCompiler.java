@@ -461,11 +461,7 @@ public final class AccumulatorCompiler
                         expressions.add(index.invoke("getSlice", Slice.class, getChannel, position));
                     }
                     else {
-                        BytecodeExpression expression = index.invoke("getObject", Object.class, getChannel, position);
-                        if (parameterType != Object.class) {
-                            expression = expression.cast(parameterType);
-                        }
-                        expressions.add(expression);
+                        expressions.add(index.invoke("getObject", Object.class, getChannel, position));
                     }
 
                     inputChannel++;
@@ -662,9 +658,6 @@ public final class AccumulatorCompiler
                     .append(getBlockBytecode)
                     .append(position)
                     .invokeInterface(Type.class, "getObject", Object.class, Block.class, int.class);
-            if (sqlType.getJavaType() != Object.class) {
-                block.checkCast(sqlType.getJavaType());
-            }
         }
     }
 

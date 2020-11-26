@@ -29,6 +29,7 @@ import io.prestosql.spi.type.MapType;
 import io.prestosql.spi.type.RowType;
 import io.prestosql.spi.type.SqlTimestampWithTimeZone;
 import io.prestosql.spi.type.TimeZoneKey;
+import io.prestosql.sql.analyzer.FeaturesConfig;
 import io.prestosql.sql.tree.QualifiedName;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -53,6 +54,7 @@ import static io.prestosql.metadata.MetadataManager.createTestMetadataManager;
 import static io.prestosql.operator.OperatorAssertion.toRow;
 import static io.prestosql.operator.aggregation.AggregationTestUtils.assertAggregation;
 import static io.prestosql.operator.aggregation.histogram.Histogram.NAME;
+import static io.prestosql.operator.aggregation.histogram.HistogramGroupImplementation.NEW;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.BooleanType.BOOLEAN;
 import static io.prestosql.spi.type.DateTimeEncoding.packDateTimeWithZone;
@@ -76,7 +78,7 @@ public class TestHistogram
     @Test
     public void testSimpleHistograms()
     {
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(VARCHAR)));
         assertAggregation(
                 aggregationFunction,
@@ -105,7 +107,7 @@ public class TestHistogram
     @Test
     public void testSharedGroupBy()
     {
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(VARCHAR)));
         assertAggregation(
                 aggregationFunction,
@@ -134,7 +136,7 @@ public class TestHistogram
     @Test
     public void testDuplicateKeysValues()
     {
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(VARCHAR)));
         assertAggregation(
                 aggregationFunction,
@@ -153,7 +155,7 @@ public class TestHistogram
     @Test
     public void testWithNulls()
     {
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(BIGINT)));
         assertAggregation(
                 aggregationFunction,
@@ -171,7 +173,7 @@ public class TestHistogram
     public void testArrayHistograms()
     {
         ArrayType arrayType = new ArrayType(VARCHAR);
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(arrayType)));
         assertAggregation(
                 aggregationFunction,
@@ -183,7 +185,7 @@ public class TestHistogram
     public void testMapHistograms()
     {
         MapType innerMapType = mapType(VARCHAR, VARCHAR);
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(innerMapType)));
 
         BlockBuilder builder = innerMapType.createBlockBuilder(null, 3);
@@ -203,7 +205,7 @@ public class TestHistogram
         RowType innerRowType = RowType.from(ImmutableList.of(
                 RowType.field("f1", BIGINT),
                 RowType.field("f2", DOUBLE)));
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(innerRowType)));
         BlockBuilder builder = innerRowType.createBlockBuilder(null, 3);
         innerRowType.writeObject(builder, toRow(ImmutableList.of(BIGINT, DOUBLE), 1L, 1.0));
@@ -219,7 +221,7 @@ public class TestHistogram
     @Test
     public void testLargerHistograms()
     {
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         InternalAggregationFunction aggregationFunction = metadata.getAggregateFunctionImplementation(metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(VARCHAR)));
         assertAggregation(
                 aggregationFunction,
@@ -393,8 +395,14 @@ public class TestHistogram
 
     private static InternalAggregationFunction getInternalDefaultVarCharAggregationn()
     {
-        Metadata metadata = createTestMetadataManager();
+        Metadata metadata = getMetadata();
         ResolvedFunction function = metadata.resolveFunction(QualifiedName.of(NAME), fromTypes(VARCHAR));
         return metadata.getAggregateFunctionImplementation(function);
+    }
+
+    public static Metadata getMetadata()
+    {
+        return createTestMetadataManager(new FeaturesConfig()
+                .setHistogramGroupImplementation(NEW));
     }
 }

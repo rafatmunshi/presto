@@ -31,8 +31,8 @@ import java.util.stream.IntStream;
 
 import static io.prestosql.block.BlockAssertions.createLongSequenceBlock;
 import static io.prestosql.block.BlockAssertions.createLongsBlock;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 public class TestDictionaryAwarePageFilter
@@ -73,9 +73,7 @@ public class TestDictionaryAwarePageFilter
     {
         DictionaryAwarePageFilter filter = createDictionaryAwarePageFilter(true, LongArrayBlock.class);
         RunLengthEncodedBlock fail = new RunLengthEncodedBlock(createLongSequenceBlock(-10, -9), 100);
-        assertThatThrownBy(() -> testFilter(filter, fail, true))
-                .isInstanceOf(NegativeValueException.class)
-                .hasMessage("value is negative: -10");
+        assertThrows(NegativeValueException.class, () -> testFilter(filter, fail, true));
     }
 
     @Test
@@ -94,9 +92,7 @@ public class TestDictionaryAwarePageFilter
     @Test
     public void testDictionaryBlockWithFailure()
     {
-        assertThatThrownBy(() -> testFilter(createDictionaryBlockWithFailure(20, 100), LongArrayBlock.class))
-                .isInstanceOf(NegativeValueException.class)
-                .hasMessage("value is negative: -10");
+        assertThrows(NegativeValueException.class, () -> testFilter(createDictionaryBlockWithFailure(20, 100), LongArrayBlock.class));
     }
 
     @Test

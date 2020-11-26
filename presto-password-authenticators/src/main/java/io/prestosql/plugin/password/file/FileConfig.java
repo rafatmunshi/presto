@@ -19,8 +19,6 @@ import io.airlift.configuration.validation.FileExists;
 import io.airlift.units.Duration;
 import io.airlift.units.MinDuration;
 
-import javax.validation.constraints.NotNull;
-
 import java.io.File;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -31,7 +29,6 @@ public class FileConfig
     private Duration refreshPeriod = new Duration(5, SECONDS);
     private int authTokenCacheMaxSize = 1000;
 
-    @NotNull
     @FileExists
     public File getPasswordFile()
     {
@@ -46,7 +43,6 @@ public class FileConfig
         return this;
     }
 
-    @NotNull
     @MinDuration("1ms")
     public Duration getRefreshPeriod()
     {

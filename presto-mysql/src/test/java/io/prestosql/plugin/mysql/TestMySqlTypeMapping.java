@@ -382,7 +382,7 @@ public class TestMySqlTypeMapping
 
     private Session sessionWithDecimalMappingAllowOverflow(RoundingMode roundingMode, int scale)
     {
-        return Session.builder(getSession())
+        return Session.builder(getQueryRunner().getDefaultSession())
                 .setCatalogSessionProperty("mysql", DECIMAL_MAPPING, ALLOW_OVERFLOW.name())
                 .setCatalogSessionProperty("mysql", DECIMAL_ROUNDING_MODE, roundingMode.name())
                 .setCatalogSessionProperty("mysql", DECIMAL_DEFAULT_SCALE, Integer.valueOf(scale).toString())
@@ -391,7 +391,7 @@ public class TestMySqlTypeMapping
 
     private Session sessionWithDecimalMappingStrict(UnsupportedTypeHandling unsupportedTypeHandling)
     {
-        return Session.builder(getSession())
+        return Session.builder(getQueryRunner().getDefaultSession())
                 .setCatalogSessionProperty("mysql", DECIMAL_MAPPING, STRICT.name())
                 .setCatalogSessionProperty("mysql", UNSUPPORTED_TYPE_HANDLING, unsupportedTypeHandling.name())
                 .build();
@@ -424,20 +424,18 @@ public class TestMySqlTypeMapping
                 .addRoundTrip(dateDataType(), dateOfLocalTimeChangeBackwardAtMidnightInSomeZone);
 
         for (String timeZoneId : ImmutableList.of(UTC_KEY.getId(), jvmZone.getId(), someZone.getId())) {
-            Session session = Session.builder(getSession())
+            Session session = Session.builder(getQueryRunner().getDefaultSession())
                     .setTimeZoneKey(TimeZoneKey.getTimeZoneKey(timeZoneId))
                     .build();
             testCases.execute(getQueryRunner(), session, mysqlCreateAndInsert("tpch.test_date"));
-            testCases.execute(getQueryRunner(), session, prestoCreateAsSelect(session, "test_date"));
-            testCases.execute(getQueryRunner(), session, prestoCreateAsSelect(getSession(), "test_date"));
-            testCases.execute(getQueryRunner(), session, prestoCreateAndInsert(session, "test_date"));
+            testCases.execute(getQueryRunner(), session, prestoCreateAsSelect("test_date"));
         }
     }
 
     @Test
     public void testDatetime()
     {
-        // TODO (https://github.com/prestosql/presto/issues/5449) MySQL datetime is not correctly read (see comment in StandardColumnMappings.timestampColumnMappingUsingSqlTimestamp)
+        // TODO MySQL datetime is not correctly read (see comment in StandardColumnMappings.timestampColumnMappingUsingSqlTimestamp)
         // testing this is hard because of https://github.com/prestosql/presto/issues/37
     }
 
@@ -541,17 +539,7 @@ public class TestMySqlTypeMapping
 
     private DataSetup prestoCreateAsSelect(String tableNamePrefix)
     {
-        return prestoCreateAsSelect(getSession(), tableNamePrefix);
-    }
-
-    private DataSetup prestoCreateAsSelect(Session session, String tableNamePrefix)
-    {
-        return new CreateAsSelectDataSetup(new PrestoSqlExecutor(getQueryRunner(), session), tableNamePrefix);
-    }
-
-    private DataSetup prestoCreateAndInsert(Session session, String tableNamePrefix)
-    {
-        return new CreateAndInsertDataSetup(new PrestoSqlExecutor(getQueryRunner(), session), tableNamePrefix);
+        return new CreateAsSelectDataSetup(new PrestoSqlExecutor(getQueryRunner()), tableNamePrefix);
     }
 
     private DataSetup mysqlCreateAndInsert(String tableNamePrefix)
@@ -568,12 +556,12 @@ public class TestMySqlTypeMapping
                 identity());
     }
 
-    private static DataType<Float> mysqlFloatDataType()
+    public static DataType<Float> mysqlFloatDataType()
     {
         return dataType("float", RealType.REAL, Object::toString);
     }
 
-    private static DataType<Double> mysqlDoubleDataType()
+    public static DataType<Double> mysqlDoubleDataType()
     {
         return dataType("double precision", DoubleType.DOUBLE, Object::toString);
     }

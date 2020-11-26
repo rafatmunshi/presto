@@ -26,7 +26,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static java.lang.String.format;
 
-public class TestingH2JdbcModule
+class TestingH2JdbcModule
         implements Module
 {
     @Override

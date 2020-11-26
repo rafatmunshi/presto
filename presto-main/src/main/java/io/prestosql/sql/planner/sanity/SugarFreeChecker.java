@@ -17,7 +17,6 @@ import com.google.common.collect.ImmutableList.Builder;
 import io.prestosql.Session;
 import io.prestosql.execution.warnings.WarningCollector;
 import io.prestosql.metadata.Metadata;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.sql.planner.ExpressionExtractor;
 import io.prestosql.sql.planner.Symbol;
 import io.prestosql.sql.planner.TypeAnalyzer;
@@ -43,13 +42,7 @@ public final class SugarFreeChecker
     private static final Visitor VISITOR = new Visitor();
 
     @Override
-    public void validate(PlanNode planNode,
-            Session session,
-            Metadata metadata,
-            TypeOperators typeOperators,
-            TypeAnalyzer typeAnalyzer,
-            TypeProvider types,
-            WarningCollector warningCollector)
+    public void validate(PlanNode planNode, Session session, Metadata metadata, TypeAnalyzer typeAnalyzer, TypeProvider types, WarningCollector warningCollector)
     {
         ExpressionExtractor.forEachExpression(planNode, SugarFreeChecker::validate);
     }

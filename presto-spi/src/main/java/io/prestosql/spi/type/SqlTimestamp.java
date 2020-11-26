@@ -28,7 +28,7 @@ import static io.prestosql.spi.type.Timestamps.round;
 import static io.prestosql.spi.type.Timestamps.roundDiv;
 import static java.lang.Math.floorDiv;
 import static java.lang.Math.floorMod;
-import static java.lang.String.format;
+import static java.lang.Math.toIntExact;
 
 public final class SqlTimestamp
 {
@@ -38,30 +38,12 @@ public final class SqlTimestamp
 
     public static SqlTimestamp fromMillis(int precision, long millis)
     {
-        return newInstanceWithRounding(precision, millis * 1000, 0);
+        return newInstance(precision, millis * 1000, 0);
     }
 
     public static SqlTimestamp newInstance(int precision, long epochMicros, int picosOfMicro)
     {
-        if (precision <= 6) {
-            if (picosOfMicro != 0) {
-                throw new IllegalArgumentException(format("Expected picosOfMicro to be 0 for precision %s: %s", precision, picosOfMicro));
-            }
-            if (round(epochMicros, 6 - precision) != epochMicros) {
-                throw new IllegalArgumentException(format("Expected 0s for digits beyond precision %s: epochMicros = %s", precision, epochMicros));
-            }
-        }
-        else {
-            if (round(picosOfMicro, 12 - precision) != picosOfMicro) {
-                throw new IllegalArgumentException(format("Expected 0s for digits beyond precision %s: picosOfMicro = %s", precision, picosOfMicro));
-            }
-        }
-
-        if (picosOfMicro < 0 || picosOfMicro > PICOSECONDS_PER_MICROSECOND) {
-            throw new IllegalArgumentException("picosOfMicro is out of range: " + picosOfMicro);
-        }
-
-        return new SqlTimestamp(precision, epochMicros, picosOfMicro);
+        return newInstanceWithRounding(precision, epochMicros, picosOfMicro);
     }
 
     private static SqlTimestamp newInstanceWithRounding(int precision, long epochMicros, int picosOfMicro)
@@ -151,7 +133,7 @@ public final class SqlTimestamp
         long epochSecond = floorDiv(epochMicros, MICROSECONDS_PER_SECOND);
         int microOfSecond = floorMod(epochMicros, MICROSECONDS_PER_SECOND);
         int nanoOfSecond = (microOfSecond * NANOSECONDS_PER_MICROSECOND) +
-                roundDiv(picosOfMicros, PICOSECONDS_PER_NANOSECOND);
+                toIntExact(roundDiv(picosOfMicros, PICOSECONDS_PER_NANOSECOND));
         return LocalDateTime.ofEpochSecond(epochSecond, nanoOfSecond, ZoneOffset.UTC);
     }
 }

@@ -23,9 +23,9 @@ import java.util.Arrays;
 import static io.prestosql.spi.type.BigintType.BIGINT;
 import static io.prestosql.spi.type.IntegerType.INTEGER;
 import static io.prestosql.spi.type.VarcharType.VARCHAR;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 public class TestListBasedRecordSet
@@ -52,9 +52,7 @@ public class TestListBasedRecordSet
         assertTrue(cursor.advanceNextPosition());
         assertEquals(cursor.getType(0), BIGINT);
         assertEquals(cursor.getType(1), VARCHAR);
-        assertThatThrownBy(() -> cursor.getLong(2))
-                .isInstanceOf(IndexOutOfBoundsException.class)
-                .hasMessage("Index 2 out of bounds for length 2");
+        assertThrows(IndexOutOfBoundsException.class, () -> cursor.getLong(2));
         assertEquals(cursor.getLong(0), 1L);
         assertEquals(cursor.getSlice(1), Slices.utf8Slice("ab"));
         assertTrue(cursor.advanceNextPosition());
@@ -64,8 +62,6 @@ public class TestListBasedRecordSet
         assertEquals(cursor.getLong(0), 3L);
         assertTrue(cursor.isNull(1));
         assertFalse(cursor.advanceNextPosition());
-        assertThatThrownBy(() -> cursor.getLong(0))
-                .isInstanceOf(IndexOutOfBoundsException.class)
-                .hasMessage("Index 3 out of bounds for length 3");
+        assertThrows(IndexOutOfBoundsException.class, () -> cursor.getLong(0));
     }
 }

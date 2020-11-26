@@ -20,7 +20,6 @@ import io.airlift.slice.Slice;
 import io.prestosql.spi.type.CharType;
 import io.prestosql.spi.type.DecimalType;
 import io.prestosql.spi.type.Decimals;
-import io.prestosql.spi.type.TimeType;
 import io.prestosql.spi.type.TimestampType;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.VarcharType;
@@ -43,7 +42,6 @@ import java.time.LocalTime;
 import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Verify.verify;
 import static com.google.common.io.BaseEncoding.base16;
 import static io.airlift.slice.SliceUtf8.countCodePoints;
 import static io.airlift.slice.Slices.utf8Slice;
@@ -67,9 +65,10 @@ import static io.prestosql.spi.type.TimestampType.TIMESTAMP_MILLIS;
 import static io.prestosql.spi.type.Timestamps.MICROSECONDS_PER_SECOND;
 import static io.prestosql.spi.type.Timestamps.NANOSECONDS_PER_DAY;
 import static io.prestosql.spi.type.Timestamps.NANOSECONDS_PER_MICROSECOND;
+import static io.prestosql.spi.type.Timestamps.NANOSECONDS_PER_MILLISECOND;
 import static io.prestosql.spi.type.Timestamps.PICOSECONDS_PER_DAY;
+import static io.prestosql.spi.type.Timestamps.PICOSECONDS_PER_MILLISECOND;
 import static io.prestosql.spi.type.Timestamps.PICOSECONDS_PER_NANOSECOND;
-import static io.prestosql.spi.type.Timestamps.round;
 import static io.prestosql.spi.type.Timestamps.roundDiv;
 import static io.prestosql.spi.type.TinyintType.TINYINT;
 import static io.prestosql.spi.type.VarbinaryType.VARBINARY;
@@ -351,31 +350,36 @@ public final class StandardColumnMappings
         return new Time(Time.valueOf(localTime).getTime() + NANOSECONDS.toMillis(localTime.getNano()));
     }
 
-    public static ColumnMapping timeColumnMapping(TimeType timeType)
+    public static ColumnMapping timeColumnMapping()
     {
-        checkArgument(timeType.getPrecision() <= 9, "Unsupported type precision: %s", timeType);
         return ColumnMapping.longMapping(
-                timeType,
+                TIME,
                 (resultSet, columnIndex) -> {
                     LocalTime time = resultSet.getObject(columnIndex, LocalTime.class);
-                    long nanosOfDay = time.toNanoOfDay();
-                    verify(nanosOfDay < NANOSECONDS_PER_DAY, "Invalid value of nanosOfDay: %s", nanosOfDay);
-                    long picosOfDay = nanosOfDay * PICOSECONDS_PER_NANOSECOND;
-                    return round(picosOfDay, 12 - timeType.getPrecision());
+                    long nanos = time.toNanoOfDay();
+                    return (roundDiv(nanos, NANOSECONDS_PER_MILLISECOND) * PICOSECONDS_PER_MILLISECOND) % PICOSECONDS_PER_DAY;
                 },
-                timeWriteFunction(timeType.getPrecision()));
+                timeWriteFunction());
     }
 
-    public static LongWriteFunction timeWriteFunction(int precision)
+    /**
+     * Truncates the time value on read to millisecond precision.
+     */
+    public static ColumnMapping timeColumnMappingWithTruncation()
     {
-        checkArgument(precision <= 9, "Unsupported precision: %s", precision);
-        return (statement, index, picosOfDay) -> {
-            picosOfDay = round(picosOfDay, 12 - precision);
-            if (picosOfDay == PICOSECONDS_PER_DAY) {
-                picosOfDay = 0;
-            }
-            statement.setObject(index, fromPrestoTime(picosOfDay));
-        };
+        return ColumnMapping.longMapping(
+                TIME,
+                (resultSet, columnIndex) -> {
+                    LocalTime time = resultSet.getObject(columnIndex, LocalTime.class);
+                    return ((time.toNanoOfDay() / NANOSECONDS_PER_MILLISECOND) * PICOSECONDS_PER_MILLISECOND) % PICOSECONDS_PER_DAY;
+                },
+                timeWriteFunction(),
+                DISABLE_PUSHDOWN);
+    }
+
+    public static LongWriteFunction timeWriteFunction()
+    {
+        return (statement, index, value) -> statement.setObject(index, fromPrestoTime(value));
     }
 
     /**

@@ -14,13 +14,18 @@
 package io.prestosql.type;
 
 import io.prestosql.metadata.Metadata;
+import io.prestosql.spi.function.InvocationConvention;
+import io.prestosql.spi.function.OperatorType;
 import io.prestosql.spi.type.Type;
 import io.prestosql.spi.type.TypeId;
 import io.prestosql.spi.type.TypeManager;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spi.type.TypeSignature;
 
 import javax.inject.Inject;
+
+import java.lang.invoke.MethodHandle;
+import java.util.List;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -28,13 +33,11 @@ public final class InternalTypeManager
         implements TypeManager
 {
     private final Metadata metadata;
-    private final TypeOperators typeOperators;
 
     @Inject
-    public InternalTypeManager(Metadata metadata, TypeOperators typeOperators)
+    public InternalTypeManager(Metadata metadata)
     {
         this.metadata = requireNonNull(metadata, "metadata is null");
-        this.typeOperators = requireNonNull(typeOperators, "typeOperators is null");
     }
 
     @Override
@@ -56,8 +59,8 @@ public final class InternalTypeManager
     }
 
     @Override
-    public TypeOperators getTypeOperators()
+    public MethodHandle resolveOperator(OperatorType operatorType, List<? extends Type> argumentTypes, InvocationConvention invocationConvention)
     {
-        return typeOperators;
+        return metadata.getScalarFunctionInvoker(metadata.resolveOperator(operatorType, argumentTypes), Optional.of(invocationConvention)).getMethodHandle();
     }
 }

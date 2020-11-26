@@ -13,7 +13,6 @@
  */
 package io.prestosql.spi.function;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -25,11 +24,6 @@ public class InvocationConvention
     private final InvocationReturnConvention returnConvention;
     private final boolean supportsSession;
     private final boolean supportsInstanceFactory;
-
-    public static InvocationConvention simpleConvention(InvocationReturnConvention returnConvention, InvocationArgumentConvention... argumentConventions)
-    {
-        return new InvocationConvention(Arrays.asList(argumentConventions), returnConvention, false, false);
-    }
 
     public InvocationConvention(
             List<InvocationArgumentConvention> argumentConventionList,

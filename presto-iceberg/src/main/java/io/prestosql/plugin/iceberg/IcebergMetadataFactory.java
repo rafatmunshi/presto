@@ -20,6 +20,7 @@ import io.prestosql.spi.type.TypeManager;
 
 import javax.inject.Inject;
 
+import static io.prestosql.plugin.hive.metastore.cache.CachingHiveMetastore.memoizeMetastore;
 import static java.util.Objects.requireNonNull;
 
 public class IcebergMetadataFactory
@@ -28,6 +29,7 @@ public class IcebergMetadataFactory
     private final HdfsEnvironment hdfsEnvironment;
     private final TypeManager typeManager;
     private final JsonCodec<CommitTaskData> commitTaskCodec;
+    private final long metastoreTransactionCacheSize;
 
     @Inject
     public IcebergMetadataFactory(
@@ -37,23 +39,33 @@ public class IcebergMetadataFactory
             TypeManager typeManager,
             JsonCodec<CommitTaskData> commitTaskDataJsonCodec)
     {
-        this(metastore, hdfsEnvironment, typeManager, commitTaskDataJsonCodec);
+        this(metastore,
+                hdfsEnvironment,
+                typeManager,
+                commitTaskDataJsonCodec,
+                config.getMetastoreTransactionCacheSize());
     }
 
     public IcebergMetadataFactory(
             HiveMetastore metastore,
             HdfsEnvironment hdfsEnvironment,
             TypeManager typeManager,
-            JsonCodec<CommitTaskData> commitTaskCodec)
+            JsonCodec<CommitTaskData> commitTaskCodec,
+            long metastoreTransactionCacheSize)
     {
         this.metastore = requireNonNull(metastore, "metastore is null");
         this.hdfsEnvironment = requireNonNull(hdfsEnvironment, "hdfsEnvironment is null");
         this.typeManager = requireNonNull(typeManager, "typeManager is null");
         this.commitTaskCodec = requireNonNull(commitTaskCodec, "commitTaskCodec is null");
+        this.metastoreTransactionCacheSize = metastoreTransactionCacheSize;
     }
 
     public IcebergMetadata create()
     {
-        return new IcebergMetadata(metastore, hdfsEnvironment, typeManager, commitTaskCodec);
+        return new IcebergMetadata(
+                memoizeMetastore(metastore, metastoreTransactionCacheSize),
+                hdfsEnvironment,
+                typeManager,
+                commitTaskCodec);
     }
 }

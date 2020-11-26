@@ -1195,8 +1195,8 @@ public class TestMathFunctions
         assertFunction("greatest(1.0, 2.0E0)", DOUBLE, 2.0);
         assertDecimalFunction("greatest(5, 4, 3.0, 2)", decimal("0000000005.0"));
 
-        // NaN
-        assertFunction("greatest(1.5E0, 0.0E0 / 0.0E0)", DOUBLE, Double.NaN);
+        // invalid
+        assertInvalidFunction("greatest(1.5E0, 0.0E0 / 0.0E0)", "Invalid argument to greatest(): NaN");
 
         // argument count limit
         tryEvaluateWithAll("greatest(" + Joiner.on(", ").join(nCopies(127, "rand()")) + ")", DOUBLE);
@@ -1267,19 +1267,15 @@ public class TestMathFunctions
         assertFunction("least(1.0, 2.0E0)", DOUBLE, 1.0);
         assertDecimalFunction("least(5, 4, 3.0, 2)", decimal("0000000002.0"));
 
-        // NaN
-        assertFunction("least(1.5E0, 0.0E0 / 0.0E0)", DOUBLE, 1.5);
+        // invalid
+        assertInvalidFunction("least(1.5E0, 0.0E0 / 0.0E0)", "Invalid argument to least(): NaN");
     }
 
-    @Test
+    @Test(expectedExceptions = PrestoException.class, expectedExceptionsMessageRegExp = "\\QInvalid argument to greatest(): NaN\\E")
     public void testGreatestWithNaN()
     {
-        assertFunction("greatest(1.5E0, 0.0E0 / 0.0E0)", DOUBLE, Double.NaN);
-        assertFunction("greatest(1.5E0, 0.0E0 / 0.0E0, 2.7E0)", DOUBLE, Double.NaN);
-        assertFunction("greatest(1.5E0, REAL '0.0' / REAL '0.0')", DOUBLE, Double.NaN);
-        assertFunction("greatest(1.5E0, REAL '0.0' / REAL '0.0', 2.7E0)", DOUBLE, Double.NaN);
-        assertFunction("greatest(null, REAL '0.0' / REAL '0.0')", REAL, null);
-        assertFunction("greatest(1.0E0 / 0.0E0, REAL '0.0' / REAL '0.0')", DOUBLE, Double.NaN);
+        functionAssertions.tryEvaluate("greatest(1.5E0, 0.0E0 / 0.0E0)", DOUBLE);
+        functionAssertions.tryEvaluate("greatest(1.5E0, REAL '0.0' / REAL '0.0')", DOUBLE);
     }
 
     @Test

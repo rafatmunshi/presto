@@ -73,11 +73,10 @@ public final class ApplyFunction
     {
         Type argumentType = functionBinding.getTypeVariable("T");
         Type returnType = functionBinding.getTypeVariable("U");
-        return new ChoicesScalarFunctionImplementation(
-                functionBinding,
+        return new ScalarFunctionImplementation(
                 NULLABLE_RETURN,
                 ImmutableList.of(BOXED_NULLABLE, FUNCTION),
-                ImmutableList.of(UnaryFunctionInterface.class),
+                ImmutableList.of(Optional.empty(), Optional.of(UnaryFunctionInterface.class)),
                 METHOD_HANDLE.asType(
                         METHOD_HANDLE.type()
                                 .changeReturnType(Primitives.wrap(returnType.getJavaType()))

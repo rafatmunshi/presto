@@ -30,7 +30,6 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 public class OracleConfig
 {
     private boolean synonymsEnabled;
-    private boolean remarksReportingEnabled;
     private Integer defaultNumberScale;
     private RoundingMode numberRoundingMode = RoundingMode.UNNECESSARY;
     private boolean connectionPoolEnabled = true;
@@ -48,18 +47,6 @@ public class OracleConfig
     public OracleConfig setSynonymsEnabled(boolean enabled)
     {
         this.synonymsEnabled = enabled;
-        return this;
-    }
-
-    public boolean isRemarksReportingEnabled()
-    {
-        return remarksReportingEnabled;
-    }
-
-    @Config("oracle.remarks-reporting.enabled")
-    public OracleConfig setRemarksReportingEnabled(boolean enabled)
-    {
-        this.remarksReportingEnabled = enabled;
         return this;
     }
 

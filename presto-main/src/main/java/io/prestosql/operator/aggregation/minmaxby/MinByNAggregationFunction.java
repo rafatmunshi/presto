@@ -13,17 +13,17 @@
  */
 package io.prestosql.operator.aggregation.minmaxby;
 
-import io.prestosql.type.BlockTypeOperators;
-
 public class MinByNAggregationFunction
         extends AbstractMinMaxByNAggregationFunction
 {
     private static final String NAME = "min_by";
 
-    public MinByNAggregationFunction(BlockTypeOperators blockTypeOperators)
+    public static final MinByNAggregationFunction MIN_BY_N_AGGREGATION = new MinByNAggregationFunction();
+
+    public MinByNAggregationFunction()
     {
         super(NAME,
-                type -> blockTypeOperators.getComparisonOperator(type).reversed(),
+                t -> ((leftBlock, leftIndex, rightBlock, rightIndex) -> -t.compareTo(leftBlock, leftIndex, rightBlock, rightIndex)),
                 "Returns the values of the first argument associated with the minimum values of the second argument");
     }
 }

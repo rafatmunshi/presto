@@ -284,9 +284,6 @@ public final class BytecodeUtils
         // Index of parameter (without @IsNull) in Presto function
         int realParameterIndex = 0;
 
-        // Index of function argument types
-        int lambdaArgumentIndex = 0;
-
         MethodType methodType = binding.getType();
         Class<?> returnType = methodType.returnType();
         Class<?> unboxedReturnType = Primitives.unwrap(returnType);
@@ -334,9 +331,8 @@ public final class BytecodeUtils
                         currentParameterIndex++;
                         break;
                     case FUNCTION:
-                        Class<?> lambdaInterface = functionInvoker.getLambdaInterfaces().get(lambdaArgumentIndex);
-                        block.append(argumentCompilers.get(realParameterIndex).apply(Optional.of(lambdaInterface)));
-                        lambdaArgumentIndex++;
+                        Optional<Class<?>> lambdaInterface = functionInvoker.getLambdaInterfaces().get(realParameterIndex);
+                        block.append(argumentCompilers.get(realParameterIndex).apply(lambdaInterface));
                         break;
                     default:
                         throw new UnsupportedOperationException(format("Unsupported argument conventsion type: %s", invocationConvention.getArgumentConvention(realParameterIndex)));

@@ -36,7 +36,6 @@ import io.prestosql.spi.connector.ConnectorTablePartitioning;
 import io.prestosql.spi.connector.ConnectorTableProperties;
 import io.prestosql.spi.connector.Constraint;
 import io.prestosql.spi.connector.ConstraintApplicationResult;
-import io.prestosql.spi.connector.LimitApplicationResult;
 import io.prestosql.spi.connector.LocalProperty;
 import io.prestosql.spi.connector.NotFoundException;
 import io.prestosql.spi.connector.ProjectionApplicationResult;
@@ -65,7 +64,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -211,7 +209,7 @@ public class KuduMetadata
             if (isKuduGroupedExecutionEnabled(session)) {
                 bucketCount = getTableBucketCount(table);
             }
-            return new KuduTableHandle(schemaTableName, table, TupleDomain.all(), Optional.empty(), false, bucketCount, OptionalLong.empty());
+            return new KuduTableHandle(schemaTableName, table, TupleDomain.all(), Optional.empty(), false, bucketCount);
         }
         catch (NotFoundException e) {
             return null;
@@ -423,8 +421,7 @@ public class KuduMetadata
                 handle.getConstraint(),
                 handle.getDesiredColumns(),
                 true,
-                handle.getBucketCount(),
-                handle.getLimit());
+                handle.getBucketCount());
     }
 
     @Override
@@ -512,8 +509,7 @@ public class KuduMetadata
                 newDomain,
                 handle.getDesiredColumns(),
                 handle.isDeleteHandle(),
-                handle.getBucketCount(),
-                handle.getLimit());
+                handle.getBucketCount());
 
         return Optional.of(new ConstraintApplicationResult<>(handle, constraint.getSummary()));
     }
@@ -570,30 +566,8 @@ public class KuduMetadata
                 handle.getConstraint(),
                 Optional.of(desiredColumns.build()),
                 handle.isDeleteHandle(),
-                handle.getBucketCount(),
-                handle.getLimit());
+                handle.getBucketCount());
 
         return Optional.of(new ProjectionApplicationResult<>(handle, projections, assignmentList.build()));
-    }
-
-    @Override
-    public Optional<LimitApplicationResult<ConnectorTableHandle>> applyLimit(ConnectorSession session, ConnectorTableHandle table, long limit)
-    {
-        KuduTableHandle handle = (KuduTableHandle) table;
-
-        if (handle.getLimit().isPresent() && handle.getLimit().getAsLong() <= limit) {
-            return Optional.empty();
-        }
-
-        handle = new KuduTableHandle(
-                handle.getSchemaTableName(),
-                handle.getTable(clientSession),
-                handle.getConstraint(),
-                handle.getDesiredColumns(),
-                handle.isDeleteHandle(),
-                handle.getBucketCount(),
-                OptionalLong.of(limit));
-
-        return Optional.of(new LimitApplicationResult<>(handle, false));
     }
 }

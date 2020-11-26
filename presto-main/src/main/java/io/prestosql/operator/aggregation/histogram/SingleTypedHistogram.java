@@ -19,8 +19,7 @@ import io.prestosql.spi.PrestoException;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.type.BlockTypeOperators.BlockPositionEqual;
-import io.prestosql.type.BlockTypeOperators.BlockPositionHashCode;
+import io.prestosql.type.TypeUtils;
 import org.openjdk.jol.info.ClassLayout;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -42,18 +41,14 @@ public class SingleTypedHistogram
     private int mask;
 
     private final Type type;
-    private final BlockPositionEqual equalOperator;
-    private final BlockPositionHashCode hashCodeOperator;
     private final BlockBuilder values;
 
     private IntBigArray hashPositions;
     private final LongBigArray counts;
 
-    private SingleTypedHistogram(Type type, BlockPositionEqual equalOperator, BlockPositionHashCode hashCodeOperator, int expectedSize, int hashCapacity, BlockBuilder values)
+    private SingleTypedHistogram(Type type, int expectedSize, int hashCapacity, BlockBuilder values)
     {
-        this.type = requireNonNull(type, "type is null");
-        this.equalOperator = requireNonNull(equalOperator, "equalOperator is null");
-        this.hashCodeOperator = requireNonNull(hashCodeOperator, "hashCodeOperator is null");
+        this.type = type;
         this.expectedSize = expectedSize;
         this.hashCapacity = hashCapacity;
         this.values = values;
@@ -68,14 +63,9 @@ public class SingleTypedHistogram
         counts.ensureCapacity(hashCapacity);
     }
 
-    public SingleTypedHistogram(Type type, BlockPositionEqual equalOperator, BlockPositionHashCode hashCodeOperator, int expectedSize)
+    public SingleTypedHistogram(Type type, int expectedSize)
     {
-        this(type,
-                equalOperator,
-                hashCodeOperator,
-                expectedSize,
-                computeBucketCount(expectedSize),
-                type.createBlockBuilder(null, computeBucketCount(expectedSize)));
+        this(type, expectedSize, computeBucketCount(expectedSize), type.createBlockBuilder(null, computeBucketCount(expectedSize)));
     }
 
     private static int computeBucketCount(int expectedSize)
@@ -83,9 +73,9 @@ public class SingleTypedHistogram
         return arraySize(expectedSize, FILL_RATIO);
     }
 
-    public SingleTypedHistogram(Block block, Type type, BlockPositionEqual equalOperator, BlockPositionHashCode hashCodeOperator, int expectedSize)
+    public SingleTypedHistogram(Block block, Type type, int expectedSize)
     {
-        this(type, equalOperator, hashCodeOperator, expectedSize);
+        this(type, expectedSize);
         requireNonNull(block, "block is null");
         for (int i = 0; i < block.getPositionCount(); i += 2) {
             add(i, block, BIGINT.getLong(block, i + 1));
@@ -135,7 +125,7 @@ public class SingleTypedHistogram
     @Override
     public void add(int position, Block block, long count)
     {
-        int hashPosition = getBucketId(hashCodeOperator.hashCodeNullSafe(block, position), mask);
+        int hashPosition = getBucketId(TypeUtils.hashPosition(type, block, position), mask);
 
         // look for an empty slot or a slot containing this key
         while (true) {
@@ -143,7 +133,7 @@ public class SingleTypedHistogram
                 break;
             }
 
-            if (equalOperator.equal(block, position, values, hashPositions.get(hashPosition))) {
+            if (type.equalTo(block, position, values, hashPositions.get(hashPosition))) {
                 counts.add(hashPositions.get(hashPosition), count);
                 return;
             }
@@ -198,7 +188,7 @@ public class SingleTypedHistogram
 
         for (int i = 0; i < values.getPositionCount(); i++) {
             // find an empty slot for the address
-            int hashPosition = getBucketId(hashCodeOperator.hashCodeNullSafe(values, i), newMask);
+            int hashPosition = getBucketId(TypeUtils.hashPosition(type, values, i), newMask);
 
             while (newHashPositions.get(hashPosition) != -1) {
                 hashPosition = (hashPosition + 1) & newMask;

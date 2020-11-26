@@ -201,10 +201,9 @@ public class UnaliasSymbolReferences
             SymbolMapper mapper = symbolMapper(mapping);
 
             Symbol newOutputSymbol = mapper.map(node.getOutputSymbol());
-            List<Symbol> actualOutputs = mapper.map(node.getActualOutputs());
 
             return new PlanAndMappings(
-                    new ExplainAnalyzeNode(node.getId(), rewrittenSource.getRoot(), newOutputSymbol, actualOutputs, node.isVerbose()),
+                    new ExplainAnalyzeNode(node.getId(), rewrittenSource.getRoot(), newOutputSymbol, node.isVerbose()),
                     mapping);
         }
 

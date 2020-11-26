@@ -34,9 +34,9 @@ public final class FunctionImplementationDependency
     private final QualifiedName name;
     private final List<TypeSignature> argumentTypes;
 
-    public FunctionImplementationDependency(QualifiedName name, List<TypeSignature> argumentTypes, Optional<InvocationConvention> invocationConvention, Class<?> type)
+    public FunctionImplementationDependency(QualifiedName name, List<TypeSignature> argumentTypes, Optional<InvocationConvention> invocationConvention)
     {
-        super(invocationConvention, type);
+        super(invocationConvention);
         this.name = requireNonNull(name, "name is null");
         this.argumentTypes = requireNonNull(argumentTypes, "argumentTypes is null");
     }

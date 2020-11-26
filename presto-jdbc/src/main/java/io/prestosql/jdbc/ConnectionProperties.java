@@ -41,11 +41,6 @@ import static java.util.stream.Collectors.toMap;
 
 final class ConnectionProperties
 {
-    enum SslVerificationMode
-    {
-        FULL, CA, NONE;
-    }
-
     public static final ConnectionProperty<String> USER = new User();
     public static final ConnectionProperty<String> PASSWORD = new Password();
     public static final ConnectionProperty<Map<String, ClientSelectedRole>> ROLES = new Roles();
@@ -53,7 +48,6 @@ final class ConnectionProperties
     public static final ConnectionProperty<HostAndPort> HTTP_PROXY = new HttpProxy();
     public static final ConnectionProperty<String> APPLICATION_NAME_PREFIX = new ApplicationNamePrefix();
     public static final ConnectionProperty<Boolean> SSL = new Ssl();
-    public static final ConnectionProperty<SslVerificationMode> SSL_VERIFICATION = new SslVerification();
     public static final ConnectionProperty<String> SSL_KEY_STORE_PATH = new SslKeyStorePath();
     public static final ConnectionProperty<String> SSL_KEY_STORE_PASSWORD = new SslKeyStorePassword();
     public static final ConnectionProperty<String> SSL_KEY_STORE_TYPE = new SslKeyStoreType();
@@ -72,8 +66,8 @@ final class ConnectionProperties
     public static final ConnectionProperty<String> CLIENT_INFO = new ClientInfo();
     public static final ConnectionProperty<String> CLIENT_TAGS = new ClientTags();
     public static final ConnectionProperty<String> TRACE_TOKEN = new TraceToken();
+    public static final ConnectionProperty<Boolean> USE_SESSION_TIMEZONE = new UseSessionTimeZone();
     public static final ConnectionProperty<Map<String, String>> SESSION_PROPERTIES = new SessionProperties();
-    public static final ConnectionProperty<String> SOURCE = new Source();
 
     private static final Set<ConnectionProperty<?>> ALL_PROPERTIES = ImmutableSet.<ConnectionProperty<?>>builder()
             .add(USER)
@@ -83,7 +77,6 @@ final class ConnectionProperties
             .add(HTTP_PROXY)
             .add(APPLICATION_NAME_PREFIX)
             .add(SSL)
-            .add(SSL_VERIFICATION)
             .add(SSL_KEY_STORE_PATH)
             .add(SSL_KEY_STORE_PASSWORD)
             .add(SSL_KEY_STORE_TYPE)
@@ -102,8 +95,8 @@ final class ConnectionProperties
             .add(CLIENT_INFO)
             .add(CLIENT_TAGS)
             .add(TRACE_TOKEN)
+            .add(USE_SESSION_TIMEZONE)
             .add(SESSION_PROPERTIES)
-            .add(SOURCE)
             .build();
 
     private static final Map<String, ConnectionProperty<?>> KEY_LOOKUP = unmodifiableMap(ALL_PROPERTIES.stream()
@@ -255,27 +248,15 @@ final class ConnectionProperties
         }
     }
 
-    private static class SslVerification
-            extends AbstractConnectionProperty<SslVerificationMode>
+    private static class SslKeyStorePath
+            extends AbstractConnectionProperty<String>
     {
         private static final Predicate<Properties> IF_SSL_ENABLED =
                 checkedPredicate(properties -> SSL.getValue(properties).orElse(false));
 
-        static final Predicate<Properties> IF_SSL_VERIFICATION_ENABLED =
-                IF_SSL_ENABLED.and(checkedPredicate(properties -> !SSL_VERIFICATION.getValue(properties).orElse(SslVerificationMode.FULL).equals(SslVerificationMode.NONE)));
-
-        public SslVerification()
-        {
-            super("SSLVerification", NOT_REQUIRED, IF_SSL_ENABLED, SslVerificationMode::valueOf);
-        }
-    }
-
-    private static class SslKeyStorePath
-            extends AbstractConnectionProperty<String>
-    {
         public SslKeyStorePath()
         {
-            super("SSLKeyStorePath", NOT_REQUIRED, SslVerification.IF_SSL_VERIFICATION_ENABLED, STRING_CONVERTER);
+            super("SSLKeyStorePath", NOT_REQUIRED, IF_SSL_ENABLED, STRING_CONVERTER);
         }
     }
 
@@ -287,7 +268,7 @@ final class ConnectionProperties
 
         public SslKeyStorePassword()
         {
-            super("SSLKeyStorePassword", NOT_REQUIRED, IF_KEY_STORE.and(SslVerification.IF_SSL_VERIFICATION_ENABLED), STRING_CONVERTER);
+            super("SSLKeyStorePassword", NOT_REQUIRED, IF_KEY_STORE, STRING_CONVERTER);
         }
     }
 
@@ -299,16 +280,19 @@ final class ConnectionProperties
 
         public SslKeyStoreType()
         {
-            super("SSLKeyStoreType", NOT_REQUIRED, IF_KEY_STORE.and(SslVerification.IF_SSL_VERIFICATION_ENABLED), STRING_CONVERTER);
+            super("SSLKeyStoreType", NOT_REQUIRED, IF_KEY_STORE, STRING_CONVERTER);
         }
     }
 
     private static class SslTrustStorePath
             extends AbstractConnectionProperty<String>
     {
+        private static final Predicate<Properties> IF_SSL_ENABLED =
+                checkedPredicate(properties -> SSL.getValue(properties).orElse(false));
+
         public SslTrustStorePath()
         {
-            super("SSLTrustStorePath", NOT_REQUIRED, SslVerification.IF_SSL_VERIFICATION_ENABLED, STRING_CONVERTER);
+            super("SSLTrustStorePath", NOT_REQUIRED, IF_SSL_ENABLED, STRING_CONVERTER);
         }
     }
 
@@ -320,7 +304,7 @@ final class ConnectionProperties
 
         public SslTrustStorePassword()
         {
-            super("SSLTrustStorePassword", NOT_REQUIRED, IF_TRUST_STORE.and(SslVerification.IF_SSL_VERIFICATION_ENABLED), STRING_CONVERTER);
+            super("SSLTrustStorePassword", NOT_REQUIRED, IF_TRUST_STORE, STRING_CONVERTER);
         }
     }
 
@@ -332,7 +316,7 @@ final class ConnectionProperties
 
         public SslTrustStoreType()
         {
-            super("SSLTrustStoreType", NOT_REQUIRED, IF_TRUST_STORE.and(SslVerification.IF_SSL_VERIFICATION_ENABLED), STRING_CONVERTER);
+            super("SSLTrustStoreType", NOT_REQUIRED, IF_TRUST_STORE, STRING_CONVERTER);
         }
     }
 
@@ -413,6 +397,15 @@ final class ConnectionProperties
         }
     }
 
+    private static class UseSessionTimeZone
+            extends AbstractConnectionProperty<Boolean>
+    {
+        public UseSessionTimeZone()
+        {
+            super("useSessionTimeZone", NOT_REQUIRED, ALLOWED, BOOLEAN_CONVERTER);
+        }
+    }
+
     private static class ExtraCredentials
             extends AbstractConnectionProperty<Map<String, String>>
     {
@@ -448,15 +441,6 @@ final class ConnectionProperties
                 checkArgument(NAME_PARTS_SPLITTER.splitToList(sessionPropertyName).size() <= 2, "Malformed session property name: %s", sessionPropertyName);
             }
             return sessionProperties;
-        }
-    }
-
-    private static class Source
-            extends AbstractConnectionProperty<String>
-    {
-        public Source()
-        {
-            super("source", NOT_REQUIRED, ALLOWED, STRING_CONVERTER);
         }
     }
 

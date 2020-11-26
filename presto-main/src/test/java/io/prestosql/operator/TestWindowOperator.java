@@ -27,9 +27,8 @@ import io.prestosql.operator.window.NthValueFunction;
 import io.prestosql.operator.window.ReflectionWindowFunctionSupplier;
 import io.prestosql.operator.window.RowNumberFunction;
 import io.prestosql.spi.Page;
-import io.prestosql.spi.connector.SortOrder;
+import io.prestosql.spi.block.SortOrder;
 import io.prestosql.spi.type.Type;
-import io.prestosql.spi.type.TypeOperators;
 import io.prestosql.spiller.SpillerFactory;
 import io.prestosql.sql.gen.OrderingCompiler;
 import io.prestosql.sql.planner.plan.PlanNodeId;
@@ -73,8 +72,7 @@ import static org.testng.Assert.assertTrue;
 @Test(singleThreaded = true)
 public class TestWindowOperator
 {
-    private static final TypeOperators TYPE_OPERATORS_CACHE = new TypeOperators();
-    private static final FrameInfo UNBOUNDED_FRAME = new FrameInfo(RANGE, UNBOUNDED_PRECEDING, Optional.empty(), Optional.empty(), UNBOUNDED_FOLLOWING, Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
+    private static final FrameInfo UNBOUNDED_FRAME = new FrameInfo(RANGE, UNBOUNDED_PRECEDING, Optional.empty(), UNBOUNDED_FOLLOWING, Optional.empty());
 
     public static final List<WindowFunctionDefinition> ROW_NUMBER = ImmutableList.of(
             window(new ReflectionWindowFunctionSupplier<>("row_number", BIGINT, ImmutableList.of(), RowNumberFunction.class), BIGINT, UNBOUNDED_FRAME, false, ImmutableList.of()));
@@ -101,8 +99,8 @@ public class TestWindowOperator
     @BeforeMethod
     public void setUp()
     {
-        executor = newCachedThreadPool(daemonThreadsNamed(getClass().getSimpleName() + "-%s"));
-        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed(getClass().getSimpleName() + "-scheduledExecutor-%s"));
+        executor = newCachedThreadPool(daemonThreadsNamed("test-executor-%s"));
+        scheduledExecutor = newScheduledThreadPool(2, daemonThreadsNamed("test-scheduledExecutor-%s"));
         spillerFactory = new DummySpillerFactory();
     }
 
@@ -780,7 +778,7 @@ public class TestWindowOperator
                 new PagesIndex.TestingFactory(false),
                 spillEnabled,
                 spillerFactory,
-                new OrderingCompiler(TYPE_OPERATORS_CACHE));
+                new OrderingCompiler());
     }
 
     public static WindowOperatorFactory createFactoryUnbounded(
@@ -810,7 +808,7 @@ public class TestWindowOperator
                 new PagesIndex.TestingFactory(false),
                 spillEnabled,
                 spillerFactory,
-                new OrderingCompiler(TYPE_OPERATORS_CACHE));
+                new OrderingCompiler());
     }
 
     private DriverContext createDriverContext()

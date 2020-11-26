@@ -35,10 +35,6 @@ import static io.prestosql.plugin.thrift.api.PrestoThriftBlock.timestampData;
 import static io.prestosql.plugin.thrift.api.datatypes.PrestoThriftTypeUtils.fromLongBasedBlock;
 import static io.prestosql.plugin.thrift.api.datatypes.PrestoThriftTypeUtils.fromLongBasedColumn;
 import static io.prestosql.spi.type.TimestampType.TIMESTAMP_MILLIS;
-import static io.prestosql.spi.type.Timestamps.MICROSECONDS_PER_MILLISECOND;
-import static java.lang.Math.floorDiv;
-import static java.lang.Math.floorMod;
-import static java.lang.Math.multiplyExact;
 
 /**
  * Elements of {@code nulls} array determine if a value for a corresponding row is null.
@@ -82,16 +78,10 @@ public final class PrestoThriftTimestamp
     {
         checkArgument(TIMESTAMP_MILLIS.equals(desiredType), "type doesn't match: %s", desiredType);
         int numberOfRecords = numberOfRecords();
-        long[] timestampsInMicros = new long[numberOfRecords];
-        if (timestamps != null) {
-            for (int i = 0; i < timestamps.length; i++) {
-                timestampsInMicros[i] = multiplyExact(timestamps[i], MICROSECONDS_PER_MILLISECOND);
-            }
-        }
         return new LongArrayBlock(
                 numberOfRecords,
                 Optional.ofNullable(nulls),
-                timestampsInMicros);
+                timestamps == null ? new long[numberOfRecords] : timestamps);
     }
 
     @Override
@@ -136,32 +126,12 @@ public final class PrestoThriftTimestamp
 
     public static PrestoThriftBlock fromBlock(Block block)
     {
-        return fromLongBasedBlock(block, TIMESTAMP_MILLIS, (nulls, timestampsInMicros) -> {
-            long[] timestampsInMillis = epochMicrosToEpochMillis(timestampsInMicros);
-            return timestampData(new PrestoThriftTimestamp(nulls, timestampsInMillis));
-        });
+        return fromLongBasedBlock(block, TIMESTAMP_MILLIS, (nulls, longs) -> timestampData(new PrestoThriftTimestamp(nulls, longs)));
     }
 
     public static PrestoThriftBlock fromRecordSetColumn(RecordSet recordSet, int columnIndex, int totalRecords)
     {
-        return fromLongBasedColumn(recordSet, columnIndex, totalRecords, (nulls, timestampsInMicros) -> {
-            long[] timestampsInMillis = epochMicrosToEpochMillis(timestampsInMicros);
-            return timestampData(new PrestoThriftTimestamp(nulls, timestampsInMillis));
-        });
-    }
-
-    private static long[] epochMicrosToEpochMillis(@Nullable long[] timestampsInMicros)
-    {
-        if (timestampsInMicros == null) {
-            return null;
-        }
-        long[] timestampsInMillis = new long[timestampsInMicros.length];
-        for (int i = 0; i < timestampsInMicros.length; i++) {
-            long epochMicros = timestampsInMicros[i];
-            checkArgument(floorMod(epochMicros, MICROSECONDS_PER_MILLISECOND) == 0, "Not whole milliseconds at position %s: %s", i, epochMicros);
-            timestampsInMillis[i] = floorDiv(epochMicros, MICROSECONDS_PER_MILLISECOND);
-        }
-        return timestampsInMillis;
+        return fromLongBasedColumn(recordSet, columnIndex, totalRecords, (nulls, longs) -> timestampData(new PrestoThriftTimestamp(nulls, longs)));
     }
 
     private static boolean sameSizeIfPresent(boolean[] nulls, long[] timestamps)

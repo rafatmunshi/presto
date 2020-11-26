@@ -13,8 +13,8 @@
  */
 package io.prestosql.operator.aggregation;
 
-import io.airlift.stats.TDigest;
-import io.prestosql.operator.aggregation.state.TDigestAndPercentileArrayState;
+import io.airlift.stats.QuantileDigest;
+import io.prestosql.operator.aggregation.state.DigestAndPercentileArrayState;
 import io.prestosql.spi.block.Block;
 import io.prestosql.spi.block.BlockBuilder;
 import io.prestosql.spi.function.AggregationFunction;
@@ -27,7 +27,8 @@ import io.prestosql.spi.type.StandardTypes;
 
 import java.util.List;
 
-import static io.prestosql.operator.aggregation.ApproximateDoublePercentileArrayAggregations.valuesAtPercentiles;
+import static io.prestosql.operator.aggregation.FloatingPointBitsConverterUtil.floatToSortableInt;
+import static io.prestosql.operator.aggregation.FloatingPointBitsConverterUtil.sortableIntToFloat;
 import static io.prestosql.spi.type.RealType.REAL;
 import static java.lang.Float.floatToRawIntBits;
 import static java.lang.Float.intBitsToFloat;
@@ -38,27 +39,27 @@ public final class ApproximateRealPercentileArrayAggregations
     private ApproximateRealPercentileArrayAggregations() {}
 
     @InputFunction
-    public static void input(@AggregationState TDigestAndPercentileArrayState state, @SqlType(StandardTypes.REAL) long value, @SqlType("array(double)") Block percentilesArrayBlock)
+    public static void input(@AggregationState DigestAndPercentileArrayState state, @SqlType(StandardTypes.REAL) long value, @SqlType("array(double)") Block percentilesArrayBlock)
     {
-        ApproximateDoublePercentileArrayAggregations.input(state, intBitsToFloat((int) value), percentilesArrayBlock);
+        ApproximateLongPercentileArrayAggregations.input(state, floatToSortableInt(intBitsToFloat((int) value)), percentilesArrayBlock);
     }
 
     @InputFunction
-    public static void weightedInput(@AggregationState TDigestAndPercentileArrayState state, @SqlType(StandardTypes.REAL) long value, @SqlType(StandardTypes.DOUBLE) double weight, @SqlType("array(double)") Block percentilesArrayBlock)
+    public static void weightedInput(@AggregationState DigestAndPercentileArrayState state, @SqlType(StandardTypes.REAL) long value, @SqlType(StandardTypes.DOUBLE) double weight, @SqlType("array(double)") Block percentilesArrayBlock)
     {
-        ApproximateDoublePercentileArrayAggregations.weightedInput(state, intBitsToFloat((int) value), weight, percentilesArrayBlock);
+        ApproximateLongPercentileArrayAggregations.weightedInput(state, floatToSortableInt(intBitsToFloat((int) value)), weight, percentilesArrayBlock);
     }
 
     @CombineFunction
-    public static void combine(@AggregationState TDigestAndPercentileArrayState state, @AggregationState TDigestAndPercentileArrayState otherState)
+    public static void combine(@AggregationState DigestAndPercentileArrayState state, @AggregationState DigestAndPercentileArrayState otherState)
     {
-        ApproximateDoublePercentileArrayAggregations.combine(state, otherState);
+        ApproximateLongPercentileArrayAggregations.combine(state, otherState);
     }
 
     @OutputFunction("array(real)")
-    public static void output(@AggregationState TDigestAndPercentileArrayState state, BlockBuilder out)
+    public static void output(@AggregationState DigestAndPercentileArrayState state, BlockBuilder out)
     {
-        TDigest digest = state.getDigest();
+        QuantileDigest digest = state.getDigest();
         List<Double> percentiles = state.getPercentiles();
 
         if (percentiles == null || digest == null) {
@@ -68,9 +69,9 @@ public final class ApproximateRealPercentileArrayAggregations
 
         BlockBuilder blockBuilder = out.beginBlockEntry();
 
-        List<Double> valuesAtPercentiles = valuesAtPercentiles(digest, percentiles);
-        for (double value : valuesAtPercentiles) {
-            REAL.writeLong(blockBuilder, floatToRawIntBits((float) value));
+        for (int i = 0; i < percentiles.size(); i++) {
+            Double percentile = percentiles.get(i);
+            REAL.writeLong(blockBuilder, floatToRawIntBits(sortableIntToFloat((int) digest.getQuantile(percentile))));
         }
 
         out.closeEntry();
